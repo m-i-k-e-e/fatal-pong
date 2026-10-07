@@ -46,7 +46,8 @@ through `bash -c '...'`.
 | `tools/gen_sprites.py` | Generates `player_sprites.inc` (sprites + palette) and the `assets/` previews |
 | `tools/gen_bonus_icons.py` | Generates `bonus_icons.inc` (the eight 16x16 bonus icons + palette, in `BonusType` order) and `assets/bonus_icons.png` |
 | `tools/gen_voice.sh` | Generates the announcer clips (`agassi-wins`, `nadal-wins`, `graf-wins`, `sharapova-wins`, `finish-him`, `finish-her`, `fatality` .mp3) with Piper TTS (voice `en_US-ryan-high`) + ffmpeg; pass clip names to regenerate only those |
-| `tools/gen_icon.py` | Generates the launcher icon `assets/icon0.png` (bloody "FATAL" over "PONG"); run from the project root (needs Pillow) |
+| `tools/gen_icon.py` | Generates the launcher icon `assets/icon0.png` (a shaded tennis ball over a blood splatter, blood dripping off it, "FATAL PONG" in Anton); run from the project root (needs Pillow) |
+| `tools/fonts/` | Anton (SIL Open Font License, `OFL.txt`), the icon's typeface |
 | `tools/screenshots.c` | Off-screen promo renders, driven by `make screenshots` |
 | `assets/` | Launcher icon, player README shipped in the zip, sprite previews, screenshots |
 

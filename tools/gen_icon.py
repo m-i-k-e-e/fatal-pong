@@ -1,77 +1,161 @@
-# Launcher icon (assets/icon0.png): "FATAL" in dripping blood over "PONG", a fireball crossing the court.
-# Drawn at 128x128 with the game's 5x7 font, saved scaled 4x. Run from the project root.
+# Launcher icon (assets/icon0.png, 512x512): a shaded tennis ball over a blood splatter, blood dripping off it,
+# "FATAL PONG" in Anton underneath. Drawn at 4x and scaled down for smooth edges. Run from the project root;
+# needs Pillow (no numpy: shading is built from blurred masks and blend modes).
+import math
 import random
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-# Same 5x7 glyphs as text.c
-FONT = {
- 'A': [0x0E,0x11,0x11,0x1F,0x11,0x11,0x11], 'D': [0x1C,0x12,0x11,0x11,0x11,0x12,0x1C],
- 'E': [0x1F,0x10,0x10,0x1E,0x10,0x10,0x1F], 'G': [0x0E,0x11,0x10,0x17,0x11,0x11,0x0F],
- 'H': [0x11,0x11,0x11,0x1F,0x11,0x11,0x11], 'K': [0x11,0x12,0x14,0x18,0x14,0x12,0x11],
- 'N': [0x11,0x11,0x19,0x15,0x13,0x11,0x11], 'O': [0x0E,0x11,0x11,0x11,0x11,0x11,0x0E],
- 'P': [0x1E,0x11,0x11,0x1E,0x10,0x10,0x10], 'U': [0x11,0x11,0x11,0x11,0x11,0x11,0x0E],
- 'F': [0x1F,0x10,0x10,0x1E,0x10,0x10,0x10], 'I': [0x0E,0x04,0x04,0x04,0x04,0x04,0x0E],
- 'T': [0x1F,0x04,0x04,0x04,0x04,0x04,0x04], 'L': [0x10,0x10,0x10,0x10,0x10,0x10,0x1F],
-}
-N = 128
-img = Image.new('RGB', (N, N), (14, 14, 18))
-d = ImageDraw.Draw(img)
-def rect(x, y, w, h, c): d.rectangle([x, y, x + w - 1, y + h - 1], fill=c)
-def text(s, x, y, scale, c, shadow=None):
-    for i, ch in enumerate(s):
-        for r, bits in enumerate(FONT[ch]):
-            for col in range(5):
-                if (bits >> (4 - col)) & 1:
-                    px, py = x + (i * 6 + col) * scale, y + r * scale
-                    if shadow: rect(px + scale // 2, py + scale // 2, scale, scale, shadow)
-                    rect(px, py, scale, scale, c)
-def centered(s, y, scale, c, shadow=None):
-    text(s, (N - (len(s) * 6 - 1) * scale) // 2, y, scale, c, shadow)
+S = 2048                                    # Working size, scaled to OUT at the end
+OUT = 512
+FONT = "tools/fonts/Anton-Regular.ttf"      # SIL Open Font License, see tools/fonts/OFL.txt
+BALL_C, BALL_R = (1024, 800), 520
 
-ORANGE, YELLOW, RED = (255, 140, 0), (255, 240, 60), (255, 50, 0)
+def radial(size, center, radius, inner, outer):
+    """RGB image fading from `inner` at `center` to `outer` at `radius` and beyond"""
+    img = Image.new('RGB', size, outer)
+    d = ImageDraw.Draw(img)
+    steps = 120
+    for i in range(steps):
+        k = i / steps
+        r = radius * (1 - k)
+        c = tuple(int(o + (n - o) * k) for o, n in zip(outer, inner))
+        d.ellipse([center[0] - r, center[1] - r, center[0] + r, center[1] + r], fill=c)
+    return img.filter(ImageFilter.GaussianBlur(radius / 40))
 
-BLOOD, DARK_BLOOD, SHINE = (200, 12, 10), (110, 0, 0), (255, 90, 80)
+def metaball(blobs, blur, size=(S, S)):
+    """Mask of circles (x, y, r) melted together: blurred, then thresholded, so they merge like liquid"""
+    m = Image.new('L', size, 0)
+    d = ImageDraw.Draw(m)
+    for x, y, r in blobs:
+        d.ellipse([x - r, y - r, x + r, y + r], fill=255)
+    return m.filter(ImageFilter.GaussianBlur(blur)).point(lambda v: 255 if v > 110 else 0)
 
-def blood_text(s, y, scale):
-    """Like draw_blood_text in hud.c: black outline, red fill darkening downward, drips from the lowest blocks"""
-    x0 = (N - (len(s) * 6 - 1) * scale) // 2
-    blocks = []
-    for i, ch in enumerate(s):
-        rows = FONT[ch]
-        for r, bits in enumerate(rows):
-            for col in range(5):
-                if not (bits >> (4 - col)) & 1: continue
-                lowest = not any((rows[k] >> (4 - col)) & 1 for k in range(r + 1, 7))
-                above = r > 0 and (rows[r - 1] >> (4 - col)) & 1
-                blocks.append((x0 + (i * 6 + col) * scale, y + r * scale, r, lowest, above))
-    drips = [(x, yy + scale, random.randint(3, 9)) for x, yy, r, lowest, _ in blocks if lowest and random.random() < 0.5]
-    for x, yy, *_ in blocks: rect(x - 1, yy - 1, scale + 2, scale + 2, (8, 0, 0))
-    for x, yy, n in drips: rect(x, yy, 3, n + 1, (8, 0, 0)); rect(x + 1, yy + n + 1, 2, 2, (8, 0, 0))
-    for x, yy, n in drips: rect(x + 1, yy, 1, n, DARK_BLOOD); rect(x + 1, yy + n, 1, 1, BLOOD)
-    for x, yy, r, _, above in blocks:
-        rect(x, yy, scale, scale, (205 - r * 14, 10, 10))
-        if not above: rect(x, yy, scale, 1, SHINE)
+def splatter(cx, cy, radius, rays, drops, seed):
+    """Blobs for a splash: a core, lobes round its edge, tapering rays and loose droplets"""
+    rnd = random.Random(seed)
+    blobs = [(cx, cy, radius * 0.75)]
+    for _ in range(14):
+        a, d = rnd.uniform(0, 2 * math.pi), radius * rnd.uniform(0.5, 0.95)
+        blobs.append((cx + math.cos(a) * d, cy + math.sin(a) * d, radius * rnd.uniform(0.2, 0.4)))
+    for _ in range(rays):                       # Streaks thrown outward, thinning, ending in a drop
+        a, length = rnd.uniform(0, 2 * math.pi), radius * rnd.uniform(1.1, 1.9)
+        w = radius * rnd.uniform(0.07, 0.13)
+        for i in range(24):
+            t = i / 23
+            d = radius * 0.6 + (length - radius * 0.6) * t
+            blobs.append((cx + math.cos(a) * d, cy + math.sin(a) * d, w * (1 - 0.65 * t)))
+        blobs.append((cx + math.cos(a) * (length + w * 2), cy + math.sin(a) * (length + w * 2), w * 0.8))
+    for _ in range(drops):
+        a, d = rnd.uniform(0, 2 * math.pi), radius * rnd.uniform(1.2, 2.3)
+        blobs.append((cx + math.cos(a) * d, cy + math.sin(a) * d, radius * rnd.uniform(0.02, 0.06)))
+    return blobs
 
-random.seed(3)
-# Frame and title
-rect(0, 0, N, 2, DARK_BLOOD); rect(0, N - 2, N, 2, DARK_BLOOD); rect(0, 0, 2, N, DARK_BLOOD); rect(N - 2, 0, 2, N, DARK_BLOOD)
-centered("PONG", 52, 4, (235, 235, 240), shadow=(70, 70, 80))
-blood_text("FATAL", 8, 4)
+def blood(mask, base, light, gloss=True):
+    """Fill `mask` with wet blood: darker toward the edges, a glossy rim lit from the upper left"""
+    inner = mask.filter(ImageFilter.GaussianBlur(40))
+    img = Image.composite(Image.new('RGB', mask.size, light), Image.new('RGB', mask.size, base), inner)
+    if gloss:                                   # Shine: the mask minus itself shifted down-right, softened
+        shifted = ImageChops.offset(mask, 10, 12)
+        rim = ImageChops.subtract(mask, shifted).filter(ImageFilter.GaussianBlur(4))
+        img = Image.composite(Image.new('RGB', mask.size, (255, 140, 130)), img, rim.point(lambda v: v * 0.7))
+    return img
 
-# Court
-for y in range(86, 126, 8): rect(63, y, 2, 4, (50, 50, 60))
-rect(10, 94, 4, 24, (240, 240, 240))       # P1
-rect(114, 88, 4, 24, (70, 110, 255))       # P2, stunned blue
+def seams(width, offset=(0, 0)):
+    """The two seams as an L mask: arcs of circles centred outside the ball on either side, so they curve in
+    like a pair of opposing C's, the whole pair turned a little"""
+    m = Image.new('L', (S, S), 0)
+    d = ImageDraw.Draw(m)
+    cx, cy = BALL_C[0] + offset[0], BALL_C[1] + offset[1]
+    for side in (-1, 1):
+        ox, r = cx + side * BALL_R * 1.28, BALL_R * 0.98
+        d.ellipse([ox - r, cy - r, ox + r, cy + r], outline=255, width=width)
+    return m.rotate(-28, resample=Image.BICUBIC, center=(cx, cy))
 
-# Fireball trail, then the fireball itself (hot core toward the leading edge)
-random.seed(7)
-for _ in range(40):
-    x = random.randint(16, 46); y = 104 + random.randint(-6, 6) * (x - 12) // 30
-    s = random.choice([2, 2, 3])
-    rect(x, y, s, s, (255, random.randint(60, 180), 0))
-rect(46, 99, 18, 12, RED)
-rect(55, 102, 8, 6, YELLOW)
-rect(86, 116, 5, 5, (255, 255, 255))        # Ball
+def ball():
+    """The tennis ball (RGB) and its mask: felt with fuzz, two seams, lit as a sphere from the upper left"""
+    mask = Image.new('L', (S, S), 0)
+    cx, cy = BALL_C
+    ImageDraw.Draw(mask).ellipse([cx - BALL_R, cy - BALL_R, cx + BALL_R, cy + BALL_R], fill=255)
+    felt = Image.new('RGB', (S, S), (214, 242, 58))           # Optic yellow
+    fuzz = Image.effect_noise((S, S), 40).filter(ImageFilter.GaussianBlur(1.2))
+    felt = Image.composite(Image.new('RGB', (S, S), (238, 255, 120)), felt, fuzz.point(lambda v: max(0, v - 128)))
+    seam_shadow = seams(56, (6, 9)).filter(ImageFilter.GaussianBlur(9))
+    felt = Image.composite(Image.new('RGB', (S, S), (120, 150, 20)), felt, seam_shadow)
+    felt = Image.composite(Image.new('RGB', (S, S), (248, 248, 240)), felt, seams(38))
+    # Sphere lighting: dark toward the lower right, a soft hotspot upper left
+    shade = radial((S, S), (cx - BALL_R * 0.35, cy - BALL_R * 0.4), BALL_R * 1.6, (255, 255, 255), (96, 96, 80))
+    lit = ImageChops.multiply(felt, shade)
+    spot = radial((S, S), (cx - BALL_R * 0.4, cy - BALL_R * 0.45), BALL_R * 0.45, (90, 90, 70), (0, 0, 0))
+    lit = ImageChops.screen(lit, spot)
+    return lit, mask
 
-img.resize((512, 512), Image.NEAREST).save('assets/icon0.png')
+def drips(seed):
+    """Blobs for blood pooling along the bottom of the ball and running off it: streaks of varied width and
+    length, each thinning as it runs and ending in a heavier drop"""
+    rnd = random.Random(seed)
+    cx, cy = BALL_C
+    blobs = []
+    for i in range(40):                         # The pool hugging the lower rim
+        a = math.radians(48 + 84 * i / 39)
+        blobs.append((cx + math.cos(a) * BALL_R * 0.94, cy + math.sin(a) * BALL_R * 0.94, rnd.uniform(26, 40)))
+    for a_deg, length, w in ((58, 120, 20), (71, 250, 30), (84, 390, 36), (97, 210, 26), (110, 300, 32),
+                             (122, 110, 18)):
+        a = math.radians(a_deg + rnd.uniform(-2, 2))
+        x0, y0 = cx + math.cos(a) * BALL_R * 0.94, cy + math.sin(a) * BALL_R * 0.94
+        for i in range(36):
+            t = i / 35
+            blobs.append((x0 + rnd.uniform(-1.5, 1.5), y0 + length * t, w * (1 - 0.45 * t)))
+        blobs.append((x0, y0 + length + w * 0.5, w * 0.95))
+    return blobs
+
+def title(img):
+    """FATAL in blood red over PONG in white, Anton, dark outline and drop shadow, a few drips off FATAL"""
+    font = ImageFont.truetype(FONT, 330)
+    words = (("FATAL", (196, 14, 20)), ("PONG", (242, 240, 234)))
+    gap = 60
+    widths = [font.getbbox(w)[2] - font.getbbox(w)[0] for w, _ in words]
+    x = (S - sum(widths) - gap) // 2
+    y = 1500
+    shadow = Image.new('L', (S, S), 0)
+    sd = ImageDraw.Draw(shadow)
+    pos = []
+    for (word, _), w in zip(words, widths):
+        pos.append((x - font.getbbox(word)[0], y))
+        sd.text((pos[-1][0] + 14, y + 18), word, font=font, fill=200, stroke_width=16, stroke_fill=200)
+        x += w + gap
+    img.paste((0, 0, 0), (0, 0), shadow.filter(ImageFilter.GaussianBlur(18)))
+    d = ImageDraw.Draw(img)
+    for (word, color), p in zip(words, pos):
+        d.text(p, word, font=font, fill=color, stroke_width=14, stroke_fill=(16, 2, 4))
+    # Drips from FATAL's baseline
+    fx = pos[0][0]
+    base = y + font.getbbox("FATAL")[3]
+    blobs = []
+    for off, length in ((70, 60), (300, 95), (430, 45)):
+        for i in range(16):
+            t = i / 15
+            blobs.append((fx + off, base - 10 + length * t, 13 * (1 - 0.3 * t)))
+        blobs.append((fx + off, base - 10 + length + 8, 17))
+    m = metaball(blobs, 6)
+    img.paste(blood(m, (150, 8, 14), (196, 14, 20), gloss=False), (0, 0), m)
+
+def main():
+    img = radial((S, S), (S // 2, S * 0.42), S * 0.8, (58, 10, 14), (8, 4, 6))
+    # Blood splashed on the ground behind the ball
+    back = metaball(splatter(BALL_C[0] + 40, BALL_C[1] + 40, 540, 7, 26, seed=4), 14)
+    img.paste(blood(back, (88, 0, 6), (128, 6, 12)), (0, 0), back)
+    lit, mask = ball()
+    img.paste(lit, (0, 0), mask)
+    # Blood on the ball: a splash over its upper right, and drips running off its bottom
+    on = metaball(splatter(BALL_C[0] + 230, BALL_C[1] - 170, 150, 6, 10, seed=11), 8)
+    on_ball = ImageChops.multiply(on, mask)
+    runs = metaball(drips(seed=5), 7)
+    wet = ImageChops.lighter(on_ball, runs)
+    img.paste(blood(wet, (150, 8, 14), (200, 18, 24)), (0, 0), wet)
+    title(img)
+    img.resize((OUT, OUT), Image.LANCZOS).save('assets/icon0.png')
+    print("wrote assets/icon0.png")
+
+if __name__ == "__main__":
+    main()
