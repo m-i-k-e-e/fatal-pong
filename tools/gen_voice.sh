@@ -1,6 +1,7 @@
 #!/bin/sh
-# Generate the announcer clips (agassi-wins, nadal-wins, finish-him, fatality, da-mole) as .mp3, in a dark,
-# Mortal Kombat style, or hyped like a Ridge Racer race announcer for clips marked `arena`. Pass clip names to regenerate only those, e.g.
+# Generate the announcer clips (agassi-wins, nadal-wins, graf-wins, sharapova-wins, finish-him, finish-her,
+# fatality, da-mole) as .mp3, in a dark, Mortal Kombat style, or hyped like a Ridge Racer race announcer for
+# clips marked `arena`. Pass clip names to regenerate only those, e.g.
 # `tools/gen_voice.sh fatality`; EXT=wav writes 48 kHz mono 16-bit WAV instead (the game's format).
 # Needs Piper TTS with a voice model (the existing clips used en_US-ryan-high), and ffmpeg built with rubberband:
 #   uv venv tts && uv pip install --python tts/bin/python piper-tts
@@ -15,7 +16,10 @@ trap 'rm -rf "$TMP"' EXIT
 
 PHRASES="Agassi wins!|agassi-wins|dark
 Nadal wins!|nadal-wins|dark
+Graf wins!|graf-wins|dark
+Sharapova wins!|sharapova-wins|dark
 Finish him!|finish-him|dark
+Finish her!|finish-her|dark
 Fatality!|fatality|dark
 DA MOLE!|da-mole|arena"
 

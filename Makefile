@@ -16,7 +16,8 @@ TARGET      := $(INSTALL_DIR)/eboot.elf
 ICON        := $(INSTALL_DIR)/sce_sys/icon0.png
 SOUNDS      := $(BUILD_DIR)/hadouken.wav $(BUILD_DIR)/tennis-ball.wav \
                $(BUILD_DIR)/agassi-wins.wav $(BUILD_DIR)/nadal-wins.wav \
-               $(BUILD_DIR)/finish-him.wav $(BUILD_DIR)/fatality.wav \
+               $(BUILD_DIR)/graf-wins.wav $(BUILD_DIR)/sharapova-wins.wav \
+               $(BUILD_DIR)/finish-him.wav $(BUILD_DIR)/finish-her.wav $(BUILD_DIR)/fatality.wav \
                $(BUILD_DIR)/cartoon-boomerang.wav $(BUILD_DIR)/fatality-scream.wav
 GRUNTS      := $(BUILD_DIR)/grunt.wav $(BUILD_DIR)/kasplat-grunt.wav
 SOUNDS      += $(GRUNTS)

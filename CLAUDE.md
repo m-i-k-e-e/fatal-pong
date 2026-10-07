@@ -1,7 +1,7 @@
 # Fatal Pong (PS5 homebrew)
 
 Two-player pong for jailbroken PS5s, written in C on SDL2: Street Fighter fireballs (hadouken), rifts that swallow the opponent, field
-bonuses, calamities (the mole and its molehills, the earthquake and its cracks, the frog rain), pixel-art tennis players (Agassi vs Nadal, Pop!-figure proportions), a grass court and a
+bonuses, calamities (the mole and its molehills, the earthquake and its cracks, the frog rain), pixel-art tennis players picked on the start screen (Agassi, Nadal, Graf, Sharapova; Pop!-figure proportions), a grass court and a
 Mortal Kombat-style announcer. Runs as an ELF payload or from the websrv Homebrew Launcher.
 
 ## Build
@@ -27,7 +27,7 @@ through `bash -c '...'`.
 
 | File | Role |
 |---|---|
-| `main.c` | SDL setup, controller handling, game states (start, playing, paused, then FINISH / FATALITY / RESULT after the last point), main loop |
+| `main.c` | SDL setup, controller handling, game states (start screen with the character select, playing, paused, then FINISH / FATALITY / RESULT after the last point), main loop |
 | `game.h` | Shared constants, `BonusType`, `Paddle`, `Ball`, `rects_overlap` |
 | `paddle.c` | Movement (speed scale, bonus effects, stun), animation state (`stride`, `moving`, timers) |
 | `ball.c` | Ball physics, paddle hits, rally speed-up (`speed_scale`, on top of `ball_base_speed()`), zig-zag, grunts |
@@ -36,8 +36,8 @@ through `bash -c '...'`.
 | `fatality.c` | End-of-match fatality: thrown racket, head explosion, blood particles with gravity, stains, shake |
 | `calamity.c` | Calamities rolled every 10th paddle hit (`paddle_hits` in ball.c): the mole (molehills), the earthquake (tremors that shake the screen and open cracks; a ball that runs into a crack tunnels out of another one) or the frog rain (frogs landing in the way that swallow the ball, also with their tongue from a distance, and spit it out half a second later via `Ball.held` / `hidden`, plus decorative rain drawn in a sky layer over the players); shared obstacle timeline, ball knocks, the mud / rock / slime titles |
 | `bonus.c` | Bonus spawning, pickup, paddle effects, tiles and icons (textures from `bonus_icons.inc`), names/descriptions |
-| `players.c` | Player sprites: builds textures from `player_sprites.inc`, picks poses, ground shadow |
-| `hud.c` | Grass court texture, scores, dripping blood, mud, rock and slime lettering, start, finish-him, fatality and win screens |
+| `players.c` | Player sprites: builds textures from `player_sprites.inc` for each `PlayerLook`, picks poses, ground shadow, names, hair colours |
+| `hud.c` | Grass court texture, scores, dripping blood, mud, rock and slime lettering, start screen with the character select (`draw_player_portrait`), finish-him / finish-her, fatality and win screens |
 | `pause.c` | Options help overlay (move list, bonus legend) and the settings sliders (up/down to pick, left/right to change while paused): ball and player speed (`start_speed_percent` in ball.c, scales the serve and `PADDLE_SPEED`) and calamity chance (`calamity_chance` in calamity.c) |
 | `draw.c` | Shared drawing helpers (`fill_pixel_oval`, used by the rift and the molehills) |
 | `text.c` | 5x7 bitmap font (the SDK has no SDL_ttf) |
@@ -45,7 +45,7 @@ through `bash -c '...'`.
 | `audio.c` | Embedded WAV clips (announcer, hadouken, racket boomerang, fatality scream, grunts), synthesized hadouken fallback, splat, rift, mole, quake, croak, tongue and spit sounds, software mixer |
 | `tools/gen_sprites.py` | Generates `player_sprites.inc` (sprites + palette) and the `assets/` previews |
 | `tools/gen_bonus_icons.py` | Generates `bonus_icons.inc` (the eight 16x16 bonus icons + palette, in `BonusType` order) and `assets/bonus_icons.png` |
-| `tools/gen_voice.sh` | Generates the announcer clips (`agassi-wins`, `nadal-wins`, `finish-him`, `fatality` .mp3) with Piper TTS + ffmpeg; pass clip names to regenerate only those |
+| `tools/gen_voice.sh` | Generates the announcer clips (`agassi-wins`, `nadal-wins`, `graf-wins`, `sharapova-wins`, `finish-him`, `finish-her`, `fatality` .mp3) with Piper TTS (voice `en_US-ryan-high`) + ffmpeg; pass clip names to regenerate only those |
 | `tools/gen_icon.py` | Generates the launcher icon `assets/icon0.png` (bloody "FATAL" over "PONG"); run from the project root (needs Pillow) |
 | `tools/screenshots.c` | Off-screen promo renders, driven by `make screenshots` |
 | `assets/` | Launcher icon, player README shipped in the zip, sprite previews, screenshots |
@@ -80,6 +80,9 @@ the build uses the SDK's SDL2 headers.
 - Each player is four stacked 32x80 layers (body, legs, left arm, racket arm), drawn 2x wide and stretched
   to the paddle height. Art faces right; the right-hand player is mirrored. The paddle's collision rect stays
   24 px wide, its front edge on art column `FRONT_COL` (players.c).
+- Players are in `PlayerLook` order everywhere: the generator's `PLAYERS`, the arrays in `players.c`, and
+  `snd_wins` (audio.c). Adding one means a `PLAYERS` entry, a `PlayerLook` value, its row in each `players.c`
+  table (`player_name`, `player_hair_color`, `player_is_female`) and a `<name>-wins` clip.
 - A shrunk player (`BONUS_SHRINK`) is drawn as a baby: the same layers and poses on a 32x40 canvas
   (`BABY_H`), square pixels at the half-height paddle, previewed in `assets/babies.png`. Its feature points are
   `BABY_POINTS` (players.c); keep them in sync with the baby layout in the generator.

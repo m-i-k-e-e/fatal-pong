@@ -44,6 +44,8 @@ static const float BABY_POINTS[][2] = {
 
 // Agassi, early 90s: bleached mullet, black and neon-pink shirt, acid-wash denim shorts.
 // Nadal, mid 2000s: long hair and red headband, sleeveless lime top, white pirate capris.
+// Graf, late 80s: golden blond bob with bangs, white top with a red V collar, white pleated skirt.
+// Sharapova, mid 2000s: platinum ponytail, red lipstick, black dress with crystals at the neckline.
 #include "player_sprites.inc"
 
 typedef struct {
@@ -54,17 +56,17 @@ typedef struct {
     SDL_Texture *arm[ARM_POSES];
 } PlayerTextures;
 
-static const char *const *const BODIES[PLAYER_COUNT] = { AGASSI_BODY, NADAL_BODY };
-static const char *const *const HEADLESS[PLAYER_COUNT] = { AGASSI_HEADLESS, NADAL_HEADLESS };
-static const char *const *const RACKETS[PLAYER_COUNT] = { AGASSI_RACKET, NADAL_RACKET };
-static const char *const (*const LEGS[PLAYER_COUNT])[SPRITE_H] = { AGASSI_LEGS, NADAL_LEGS };
-static const char *const (*const LEFT_ARMS[PLAYER_COUNT])[SPRITE_H] = { AGASSI_LEFT_ARM, NADAL_LEFT_ARM };
-static const char *const (*const ARMS[PLAYER_COUNT])[SPRITE_H] = { AGASSI_ARM, NADAL_ARM };
-static const char *const *const BABY_BODIES[PLAYER_COUNT] = { AGASSI_BABY_BODY, NADAL_BABY_BODY };
-static const char *const *const BABY_HEADLESS[PLAYER_COUNT] = { AGASSI_BABY_HEADLESS, NADAL_BABY_HEADLESS };
-static const char *const (*const BABY_LEGS[PLAYER_COUNT])[BABY_H] = { AGASSI_BABY_LEGS, NADAL_BABY_LEGS };
-static const char *const (*const BABY_LEFT_ARMS[PLAYER_COUNT])[BABY_H] = { AGASSI_BABY_LEFT_ARM, NADAL_BABY_LEFT_ARM };
-static const char *const (*const BABY_ARMS[PLAYER_COUNT])[BABY_H] = { AGASSI_BABY_ARM, NADAL_BABY_ARM };
+static const char *const *const BODIES[PLAYER_COUNT] = { AGASSI_BODY, NADAL_BODY, GRAF_BODY, SHARAPOVA_BODY };
+static const char *const *const HEADLESS[PLAYER_COUNT] = { AGASSI_HEADLESS, NADAL_HEADLESS, GRAF_HEADLESS, SHARAPOVA_HEADLESS };
+static const char *const *const RACKETS[PLAYER_COUNT] = { AGASSI_RACKET, NADAL_RACKET, GRAF_RACKET, SHARAPOVA_RACKET };
+static const char *const (*const LEGS[PLAYER_COUNT])[SPRITE_H] = { AGASSI_LEGS, NADAL_LEGS, GRAF_LEGS, SHARAPOVA_LEGS };
+static const char *const (*const LEFT_ARMS[PLAYER_COUNT])[SPRITE_H] = { AGASSI_LEFT_ARM, NADAL_LEFT_ARM, GRAF_LEFT_ARM, SHARAPOVA_LEFT_ARM };
+static const char *const (*const ARMS[PLAYER_COUNT])[SPRITE_H] = { AGASSI_ARM, NADAL_ARM, GRAF_ARM, SHARAPOVA_ARM };
+static const char *const *const BABY_BODIES[PLAYER_COUNT] = { AGASSI_BABY_BODY, NADAL_BABY_BODY, GRAF_BABY_BODY, SHARAPOVA_BABY_BODY };
+static const char *const *const BABY_HEADLESS[PLAYER_COUNT] = { AGASSI_BABY_HEADLESS, NADAL_BABY_HEADLESS, GRAF_BABY_HEADLESS, SHARAPOVA_BABY_HEADLESS };
+static const char *const (*const BABY_LEGS[PLAYER_COUNT])[BABY_H] = { AGASSI_BABY_LEGS, NADAL_BABY_LEGS, GRAF_BABY_LEGS, SHARAPOVA_BABY_LEGS };
+static const char *const (*const BABY_LEFT_ARMS[PLAYER_COUNT])[BABY_H] = { AGASSI_BABY_LEFT_ARM, NADAL_BABY_LEFT_ARM, GRAF_BABY_LEFT_ARM, SHARAPOVA_BABY_LEFT_ARM };
+static const char *const (*const BABY_ARMS[PLAYER_COUNT])[BABY_H] = { AGASSI_BABY_ARM, NADAL_BABY_ARM, GRAF_BABY_ARM, SHARAPOVA_BABY_ARM };
 static PlayerTextures textures[PLAYER_COUNT], babies[PLAYER_COUNT];
 static SDL_Texture *rackets[PLAYER_COUNT];
 static bool sprites_ok;
@@ -244,7 +246,34 @@ void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool 
     if (depth > 0.0f) SDL_RenderSetClipRect(renderer, NULL);
 }
 
-// Display name for the win screen
+// The player standing, unscaled art pixels `scale` screen pixels square, top-left at (x, y): for the character
+// select. Nothing if the sprites failed to build.
+void draw_player_portrait(SDL_Renderer *renderer, PlayerLook look, int x, int y, int scale, bool faces_right) {
+    if (!sprites_ok) return;
+    const PlayerTextures *t = &textures[look];
+    SDL_Texture *stack[4] = { t->body, t->legs[0], t->left_arm[0], t->arm[0] };
+    SDL_Rect dst = { x, y, SPRITE_W * scale, SPRITE_H * scale };
+    for (int i = 0; i < 4; i++) {
+        SDL_SetTextureColorMod(stack[i], 255, 255, 255);
+        SDL_RenderCopyEx(renderer, stack[i], NULL, &dst, 0.0, NULL, faces_right ? SDL_FLIP_NONE : SDL_FLIP_HORIZONTAL);
+    }
+}
+
+// Display name for the character select and win screens
 const char *player_name(PlayerLook look) {
-    return look == PLAYER_AGASSI ? "AGASSI" : "NADAL";
+    static const char *const NAMES[PLAYER_COUNT] = { "AGASSI", "NADAL", "GRAF", "SHARAPOVA" };
+    return NAMES[look];
+}
+
+// True for Graf and Sharapova
+bool player_is_female(PlayerLook look) {
+    return look == PLAYER_GRAF || look == PLAYER_SHARAPOVA;
+}
+
+// Mid tone of the player's hair (see tools/gen_sprites.py)
+SDL_Color player_hair_color(PlayerLook look) {
+    static const SDL_Color HAIR[PLAYER_COUNT] = {
+        { 228, 192, 100, 255 }, { 74, 46, 28, 255 }, { 206, 166, 90, 255 }, { 244, 232, 184, 255 },
+    };
+    return HAIR[look];
 }

@@ -160,29 +160,51 @@ void draw_hud(SDL_Renderer *renderer, const Paddle *p1, const Paddle *p2) {
     draw_effect_indicator(renderer, p2, SCREEN_WIDTH / 2 + 100, 130);
 }
 
-// Title over the dimmed, frozen court until player 1 presses Cross
-void draw_start_screen(SDL_Renderer *renderer, Uint32 ticks) {
+// One side of the character select: "PLAYER n" over the chosen player's portrait between "<" and ">", the name
+// underneath. Centered on `cx`; the right-hand player faces left as in game.
+static void draw_player_card(SDL_Renderer *renderer, int n, PlayerLook look, int cx, bool faces_right) {
+    const int scale = 4, top = 350, w = 32 * scale, h = 80 * scale;
+    char label[16];
+    snprintf(label, sizeof(label), "PLAYER %d", n);
+    SDL_SetRenderDrawColor(renderer, 160, 160, 170, 255);
+    draw_text_centered(renderer, label, cx, top - 50, 5);
+    draw_player_portrait(renderer, look, cx - w / 2, top, scale, faces_right);
+    SDL_SetRenderDrawColor(renderer, 0, 220, 255, 255);
+    draw_text(renderer, "<", cx - w / 2 - 90, top + h / 2 - 28, 8);
+    draw_text(renderer, ">", cx + w / 2 + 50, top + h / 2 - 28, 8);
+    SDL_SetRenderDrawColor(renderer, 255, 140, 0, 255);
+    draw_text_centered(renderer, player_name(look), cx, top + h + 30, 7);
+}
+
+// Title and character select over the dimmed, frozen court until player 1 presses Cross: each player's pick
+// with "VS" between them
+void draw_start_screen(SDL_Renderer *renderer, Uint32 ticks, PlayerLook p1_look, PlayerLook p2_look) {
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 150);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 170);
     SDL_RenderFillRect(renderer, NULL);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 
     // "FATAL" in dripping blood like the win screen, "PONG" in white
-    const int scale = 14;
+    const int scale = 14, title_y = 110;
+    int frames = (int)(ticks * 60 / 1000);
     int x0 = SCREEN_WIDTH / 2 - text_width("FATAL PONG", scale) / 2;
     int pong_x = x0 + 6 * (TEXT_GLYPH_W + 1) * scale;
-    draw_blood_text(renderer, "FATAL", x0 + text_width("FATAL", scale) / 2, 300, scale, (int)(ticks * 60 / 1000));
+    draw_blood_text(renderer, "FATAL", x0 + text_width("FATAL", scale) / 2, title_y, scale, frames);
     SDL_SetRenderDrawColor(renderer, 60, 60, 70, 255);
-    draw_text(renderer, "PONG", pong_x + 7, 307, scale);
+    draw_text(renderer, "PONG", pong_x + 7, title_y + 7, scale);
     SDL_SetRenderDrawColor(renderer, 240, 240, 245, 255);
-    draw_text(renderer, "PONG", pong_x, 300, scale);
+    draw_text(renderer, "PONG", pong_x, title_y, scale);
+
+    draw_player_card(renderer, 1, p1_look, SCREEN_WIDTH / 2 - 420, true);
+    draw_player_card(renderer, 2, p2_look, SCREEN_WIDTH / 2 + 420, false);
+    draw_blood_text(renderer, "VS", SCREEN_WIDTH / 2, 470, 12, frames);
 
     if ((ticks / 500) % 2 == 0) {
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-        draw_text_centered(renderer, "PLAYER 1: PRESS X TO START", SCREEN_WIDTH / 2, 620, 6);
+        draw_text_centered(renderer, "PLAYER 1: PRESS X TO START", SCREEN_WIDTH / 2, 860, 6);
     }
     SDL_SetRenderDrawColor(renderer, 160, 160, 170, 255);
-    draw_text_centered(renderer, "OPTIONS: HOW TO PLAY", SCREEN_WIDTH / 2, 760, 4);
+    draw_text_centered(renderer, "LEFT / RIGHT: CHOOSE PLAYER      OPTIONS: HOW TO PLAY", SCREEN_WIDTH / 2, 960, 4);
 }
 
 // --- Dripping text (blood, mud, crumbling rock, slime) ---
@@ -381,14 +403,16 @@ void draw_win_screen(SDL_Renderer *renderer, const char *winner, int winner_scor
     }
 }
 
-// Match point: the winner has a few seconds to enter the fatality. Light tint so the players stay visible.
-void draw_finish_screen(SDL_Renderer *renderer, int frames, int frames_left, int window, int presses, int needed) {
+// Match point: the winner has a few seconds to enter the fatality ("FINISH HER!" if `her`, the loser being Graf
+// or Sharapova). Light tint so the players stay visible.
+void draw_finish_screen(SDL_Renderer *renderer, int frames, int frames_left, int window, int presses, int needed,
+                        bool her) {
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer, 40, 0, 0, 90);
     SDL_RenderFillRect(renderer, NULL);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 
-    draw_blood_text(renderer, "FINISH HIM!", SCREEN_WIDTH / 2, 190, 14, frames);
+    draw_blood_text(renderer, her ? "FINISH HER!" : "FINISH HIM!", SCREEN_WIDTH / 2, 190, 14, frames);
 
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     int label_w = text_width("TRIANGLE X3", 4);

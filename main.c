@@ -33,6 +33,16 @@ static float read_direction(SDL_GameController *pad, SDL_GameControllerAxis axis
     return abs(value) > 8000 ? value / 32767.0f : 0.0f;
 }
 
+// Left/right for the character select: -1, 1 or 0 from the D-pad or left stick, or only the right stick for the
+// second player on a shared pad
+static int read_choice(SDL_GameController *pad, bool right_stick) {
+    if (!pad) return 0;
+    if (!right_stick && SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT)) return -1;
+    if (!right_stick && SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) return 1;
+    Sint16 x = SDL_GameControllerGetAxis(pad, right_stick ? SDL_CONTROLLER_AXIS_RIGHTX : SDL_CONTROLLER_AXIS_LEFTX);
+    return x < -16000 ? -1 : x > 16000 ? 1 : 0;
+}
+
 // Fill the first free player slot. SDL also sends an "added" event for controllers already opened
 // at startup, and reopening one returns the same handle, so skip it or one pad would drive both players.
 static void open_pad(int device_index, SDL_GameController **pad1, SDL_GameController **pad2) {
@@ -105,6 +115,8 @@ int main(int argc, char *argv[]) {
     bool running = true;
     bool paused = false;
     bool started = false;                          // Waits on the start screen for player 1's Cross
+    PlayerLook looks[2] = { PLAYER_AGASSI, PLAYER_NADAL };  // Picked on the start screen
+    int choice_was[2] = { 0, 0 };                  // Last frame's left/right, so each push moves one step
     bool cross_was_down = true;                    // So a Cross still held from launching the app doesn't start it
     // After the last point: FINISH (the winner may enter the fatality), FATALITY, then the RESULT screen
     enum { END_FINISH, END_FATALITY, END_RESULT } end_phase = END_FINISH;
@@ -146,6 +158,19 @@ int main(int argc, char *argv[]) {
         if (!started && cross_pressed) started = true;
         bool playing = started && !paused;
 
+        // Character select: each player cycles through the players with left/right (player 2 on the right
+        // stick when sharing player 1's pad)
+        if (!started && !paused) {
+            for (int i = 0; i < 2; i++) {
+                int dir = i == 0 ? read_choice(pad1, false) : pad2 ? read_choice(pad2, false) : read_choice(pad1, true);
+                if (dir && dir != choice_was[i]) {
+                    looks[i] = (PlayerLook)((looks[i] + dir + PLAYER_COUNT) % PLAYER_COUNT);
+                    play_sound(&snd_paddle_hit);
+                }
+                choice_was[i] = dir;
+            }
+        }
+
         // Special move motions (hadouken, rift)
         if (winner == 0 && playing) {
             // A shared pad is split in two halves (see update_special_input)
@@ -166,8 +191,7 @@ int main(int argc, char *argv[]) {
         if (winner != 0 && playing) {
             end_timer++;
             Paddle *champ = winner == 1 ? &p1 : &p2, *loser = winner == 1 ? &p2 : &p1;
-            PlayerLook champ_look = winner == 1 ? PLAYER_AGASSI : PLAYER_NADAL;
-            PlayerLook loser_look = winner == 1 ? PLAYER_NADAL : PLAYER_AGASSI;
+            PlayerLook champ_look = looks[winner - 1], loser_look = looks[2 - winner];
             fatality_update();
 
             if (end_phase == END_FINISH) {
@@ -180,14 +204,14 @@ int main(int argc, char *argv[]) {
                 } else if (end_timer >= FATALITY_WINDOW) {
                     end_phase = END_RESULT;
                     end_timer = 0;
-                    play_sound(winner == 1 ? &snd_agassi_wins : &snd_nadal_wins);
+                    play_sound(&snd_wins[champ_look]);
                 }
                 triangle_was_down = triangle;
             } else if (end_phase == END_FATALITY) {
                 if (!fatality_active()) {
                     end_phase = END_RESULT;
                     end_timer = 0;
-                    play_sound(winner == 1 ? &snd_agassi_wins : &snd_nadal_wins);
+                    play_sound(&snd_wins[champ_look]);
                 }
             } else {
                 // Result screen: the winner celebrates (if they still have a racket); Cross starts a new
@@ -246,7 +270,7 @@ int main(int argc, char *argv[]) {
                 triangle_presses = 0;
                 triangle_was_down = true;          // A Triangle already held doesn't count
                 end_rifts();                       // Nobody stays sunk through the end screens
-                play_sound(&snd_finish_him);
+                play_sound(player_is_female(looks[2 - winner]) ? &snd_finish_her : &snd_finish_him);
             }
         }
 
@@ -279,8 +303,8 @@ int main(int argc, char *argv[]) {
         draw_calamity_ground(renderer);
         draw_rifts(renderer);
         draw_particles(renderer);
-        draw_player(renderer, &p1, PLAYER_AGASSI, true);
-        draw_player(renderer, &p2, PLAYER_NADAL, false);
+        draw_player(renderer, &p1, looks[0], true);
+        draw_player(renderer, &p2, looks[1], false);
         draw_fireballs(renderer);
         draw_ball(renderer, &ball);
         draw_calamity_sky(renderer);
@@ -289,15 +313,15 @@ int main(int argc, char *argv[]) {
 
         if (started && winner == 0) draw_calamity_title(renderer);
         if (paused) draw_pause_menu(renderer);
-        else if (!started) draw_start_screen(renderer, SDL_GetTicks());
+        else if (!started) draw_start_screen(renderer, SDL_GetTicks(), looks[0], looks[1]);
         else if (winner != 0 && end_phase == END_FINISH)
             draw_finish_screen(renderer, end_timer, FATALITY_WINDOW - end_timer, FATALITY_WINDOW,
-                               triangle_presses, FATALITY_PRESSES);
+                               triangle_presses, FATALITY_PRESSES, player_is_female(looks[2 - winner]));
         else if (winner != 0 && end_phase == END_FATALITY)
             draw_fatality_screen(renderer, fatality_since_impact());
         else if (winner != 0) {
             const Paddle *champ = winner == 1 ? &p1 : &p2, *loser = winner == 1 ? &p2 : &p1;
-            draw_win_screen(renderer, player_name(winner == 1 ? PLAYER_AGASSI : PLAYER_NADAL), champ->score,
+            draw_win_screen(renderer, player_name(looks[winner - 1]), champ->score,
                             loser->score, end_timer >= WIN_SCREEN_MIN_FRAMES, end_timer);
         }
 

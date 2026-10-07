@@ -104,7 +104,7 @@ static void explode(void) {
     }
     // Chunks of the head: skin, hair and (for Nadal) bits of headband
     SDL_Color skin = { 230, 174, 134, 255 };
-    SDL_Color hair = victim_look == PLAYER_AGASSI ? (SDL_Color){ 228, 192, 100, 255 } : (SDL_Color){ 74, 46, 28, 255 };
+    SDL_Color hair = player_hair_color(victim_look);
     SDL_Color band = { 210, 40, 40, 255 };
     for (int i = 0; i < BURST_CHUNKS; i++) {
         float a = frand(0, 2 * (float)M_PI), speed = frand(4, 15);

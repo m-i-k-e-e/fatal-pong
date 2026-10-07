@@ -11,9 +11,10 @@ typedef struct {
 
 extern Sound snd_hadouken;
 extern Sound snd_paddle_hit;
-extern Sound snd_agassi_wins;     // Announcer, made by tools/gen_voice.sh
-extern Sound snd_nadal_wins;
+#define WIN_CLIPS 4
+extern Sound snd_wins[WIN_CLIPS];   // Announcer, made by tools/gen_voice.sh: "<name> wins!" in PlayerLook order
 extern Sound snd_finish_him;
+extern Sound snd_finish_her;
 extern Sound snd_fatality;
 extern Sound snd_boomerang;     // Fatality: the thrown racket, the loser's scream as the head explodes
 extern Sound snd_scream;

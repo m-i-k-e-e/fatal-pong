@@ -18,7 +18,10 @@ EMBED_WAV(hadouken_wav, "hadouken.wav");
 EMBED_WAV(tennis_ball_wav, "tennis-ball.wav");
 EMBED_WAV(agassi_wins_wav, "agassi-wins.wav");
 EMBED_WAV(nadal_wins_wav, "nadal-wins.wav");
+EMBED_WAV(graf_wins_wav, "graf-wins.wav");
+EMBED_WAV(sharapova_wins_wav, "sharapova-wins.wav");
 EMBED_WAV(finish_him_wav, "finish-him.wav");
+EMBED_WAV(finish_her_wav, "finish-her.wav");
 EMBED_WAV(fatality_wav, "fatality.wav");
 EMBED_WAV(boomerang_wav, "cartoon-boomerang.wav");
 EMBED_WAV(scream_wav, "fatality-scream.wav");
@@ -37,9 +40,9 @@ static SDL_AudioSpec audio_spec;
 static Voice voices[MAX_VOICES];    // Touched by the audio thread; lock the device to change
 Sound snd_hadouken;
 Sound snd_paddle_hit;
-Sound snd_agassi_wins;
-Sound snd_nadal_wins;
+Sound snd_wins[WIN_CLIPS];
 Sound snd_finish_him;
+Sound snd_finish_her;
 Sound snd_fatality;
 Sound snd_boomerang;
 Sound snd_scream;
@@ -425,10 +428,13 @@ void init_audio(void) {
     }
     if (!load_wav(tennis_ball_wav, tennis_ball_wav_end, &snd_paddle_hit))
         printf("[pong] tennis-ball.wav unusable (%s), paddle hits are silent\n", SDL_GetError());
-    if (!load_wav(agassi_wins_wav, agassi_wins_wav_end, &snd_agassi_wins) ||
-        !load_wav(nadal_wins_wav, nadal_wins_wav_end, &snd_nadal_wins))
+    if (!load_wav(agassi_wins_wav, agassi_wins_wav_end, &snd_wins[0]) ||
+        !load_wav(nadal_wins_wav, nadal_wins_wav_end, &snd_wins[1]) ||
+        !load_wav(graf_wins_wav, graf_wins_wav_end, &snd_wins[2]) ||
+        !load_wav(sharapova_wins_wav, sharapova_wins_wav_end, &snd_wins[3]))
         printf("[pong] announcer clip unusable (%s), wins are silent\n", SDL_GetError());
     if (!load_wav(finish_him_wav, finish_him_wav_end, &snd_finish_him) ||
+        !load_wav(finish_her_wav, finish_her_wav_end, &snd_finish_her) ||
         !load_wav(fatality_wav, fatality_wav_end, &snd_fatality))
         printf("[pong] fatality announcer clip unusable (%s)\n", SDL_GetError());
     if (!load_wav(boomerang_wav, boomerang_wav_end, &snd_boomerang) ||
@@ -471,9 +477,9 @@ void shutdown_audio(void) {
     if (audio_dev) SDL_CloseAudioDevice(audio_dev);
     SDL_free(snd_hadouken.samples);
     SDL_free(snd_paddle_hit.samples);
-    SDL_free(snd_agassi_wins.samples);
-    SDL_free(snd_nadal_wins.samples);
+    for (int i = 0; i < WIN_CLIPS; i++) SDL_free(snd_wins[i].samples);
     SDL_free(snd_finish_him.samples);
+    SDL_free(snd_finish_her.samples);
     SDL_free(snd_fatality.samples);
     SDL_free(snd_boomerang.samples);
     SDL_free(snd_scream.samples);

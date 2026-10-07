@@ -2,6 +2,7 @@ PS5 FATAL PONG
 ==============
 
 Two-player pong with Street Fighter fireballs and field bonuses, for jailbroken PS5s.
+Play as Agassi, Nadal, Graf or Sharapova.
 
 
 INSTALL
@@ -24,6 +25,7 @@ Everything (sounds included) is inside the executable; no other files are needed
 CONTROLS
 --------
 
+  Choose player      Left/right on the title screen (player 2: right stick on a shared pad)
   Start game         Cross (player 1, on the title screen)
   Move paddle        D-pad up/down or left stick
   Hadouken           Down, Forward, then Square or R1
@@ -59,8 +61,9 @@ RULES
                       off as new ones land; the small ones only pass through. A big frog
                       swallows the ball, or catches it from a distance with its tongue,
                       keeps it half a second and spits it out in a random direction.
-    A ball that hits a molehill or a crack is knocked off at an angle or bounces back.
-  - When the match is won: FINISH HIM! The winner can throw the racket into the
+    A ball that hits a molehill is knocked off at an angle or bounces back; one that
+    runs into a crack drops in and comes out of another crack.
+  - When the match is won: FINISH HIM! (or HER!) The winner can throw the racket into the
     loser's face with a fatality.
 
 

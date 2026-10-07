@@ -28,6 +28,8 @@ LEFT_FRAMES = 3                         # Left arm: hanging, charge, thrust
 MATERIALS = {
     'skin':   ('e', 'dsSa'),
     'blond':  ('Z', 'zyY1'),
+    'honey':  ('F', 'ftAD'),            # Graf's darker golden blond
+    'plat':   ('U', '{}|_'),            # Sharapova's platinum blond
     'brown':  ('x', 'hH23'),
     'black':  ('K', 'B456'),
     'pink':   ('7', 'Pp89'),
@@ -45,6 +47,8 @@ MATERIALS = {
 COLORS = {
     'e': (96, 56, 38),    'd': (150, 94, 66),   's': (198, 136, 98),  'S': (230, 174, 134), 'a': (250, 212, 176),
     'Z': (80, 56, 24),    'z': (134, 98, 42),   'y': (186, 146, 64),  'Y': (228, 192, 100), '1': (252, 232, 156),
+    'F': (78, 52, 22),    'f': (136, 96, 44),   't': (176, 132, 62),  'A': (206, 166, 90),  'D': (232, 200, 128),
+    'U': (96, 84, 56),    '{': (176, 160, 112), '}': (220, 204, 150), '|': (244, 232, 184), '_': (255, 250, 220),
     'x': (20, 12, 6),     'h': (46, 28, 16),    'H': (74, 46, 28),    '2': (108, 72, 46),   '3': (146, 104, 70),
     'K': (10, 10, 14),    'B': (28, 28, 36),    '4': (46, 46, 58),    '5': (70, 70, 86),    '6': (100, 100, 120),
     '7': (120, 16, 72),   'P': (190, 36, 130),  'p': (240, 76, 170),  '8': (255, 130, 205), '9': (255, 190, 230),
@@ -164,8 +168,21 @@ HEAD_MASK = [
 HEAD_ROWS = len(HEAD_MASK)
 SPHERE = dict(regions={'face', 'hair', 'band'}, ellipse=(HEAD_X + 12, 21, 12.5, 22))
 
-def paint_head(L, hair_mat, headband):
+def head_mask(style):
+    """HEAD_MASK for a hairstyle: 'long' as drawn, 'bob' cut at the chin with straight bangs, 'pulled' back off
+    the face (into a ponytail, painted separately)."""
+    rows = []
     for y, half in enumerate(HEAD_MASK):
+        if style == 'bob' and y <= 16:
+            half = half.replace('f', 'h')
+        elif style == 'bob' and y >= 36 or style == 'pulled' and y >= 26:
+            half = half.replace('h', '.')
+        rows.append(half)
+    return rows
+
+def paint_head(L, hair_mat, headband, style='long'):
+    mask = head_mask(style)
+    for y, half in enumerate(mask):
         for x, c in enumerate(half + half[::-1]):
             px = HEAD_X + x
             if c == 'h':
@@ -174,7 +191,7 @@ def paint_head(L, hair_mat, headband):
                 L.paint(px, y, 'hair', hair_mat, streak - max(0, y - 24) * 0.035)
             elif c == 'f':
                 # Hair shades the face just below and beside it
-                near_hair = any(0 <= y - dy and HEAD_MASK[y - dy][min(x, 23 - x)] == 'h' for dy in (1, 2))
+                near_hair = any(0 <= y - dy and mask[y - dy][min(x, 23 - x)] == 'h' for dy in (1, 2))
                 L.paint(px, y, 'face', 'skin', -0.5 if near_hair else 0.0)
             elif c == 'n':
                 L.paint(px, y, 'neck', 'skin', -0.6)
@@ -184,7 +201,9 @@ def paint_head(L, hair_mat, headband):
                 if L.region[y][x] in ('hair', 'face'):
                     L.paint(x, y, 'band', 'red')
 
-def face(L, smile, brows):
+def face(L, smile, brows, lips="Ll", lashes=False):
+    """Brows, eyes (with lashes at the outer corners if `lashes`), nose and mouth; `lips` are the upper and lower
+    lip colours."""
     # Brows
     for x, c in brows:
         L.pixel(x, 20, c[0])
@@ -198,6 +217,9 @@ def face(L, smile, brows):
         for i in (1, 2, 3):
             L.pixel(x0 + i, 22, 'e')
             L.pixel(x0 + i, 24, 's')
+    if lashes:
+        L.pixel(4, 22, 'k'); L.pixel(4, 21, 'k')
+        L.pixel(21, 22, 'k'); L.pixel(21, 21, 'k')
     # Nose: lit bridge on the left, shadow on the right, nostrils
     for y in range(24, 29):
         L.pixel(12, y, 'a')
@@ -210,14 +232,14 @@ def face(L, smile, brows):
     if smile:
         L.pixel(9, 32, 'd'); L.pixel(16, 32, 'd')
         for x in range(10, 16):
-            L.pixel(x, 33, 'L')
+            L.pixel(x, 33, lips[0])
         for x in range(11, 15):
-            L.pixel(x, 34, 'l')
+            L.pixel(x, 34, lips[1])
     else:
         for x in range(10, 16):
             L.pixel(x, 33, 'e')
         for x in range(11, 15):
-            L.pixel(x, 34, 'L')
+            L.pixel(x, 34, lips[0])
     for x in range(11, 15):
         L.pixel(x, 35, 's')
 
@@ -228,7 +250,7 @@ TORSO_LEFT, TORSO_RIGHT = 8, 17
 ARM_X = 5                               # Hanging left arm, 2 px of skin
 
 def body(p, headless=False):
-    """Head, torso and shorts; the left arm is its own layer so it can animate.
+    """Head, torso and shorts (or a skirt, flaring out); the left arm is its own layer so it can animate.
     Headless (after a fatality): a bloody neck stump instead of the head, blood soaking the collar."""
     L = Layer()
     # Torso, shaded as a cylinder; the big head casts a shadow on the shoulders
@@ -239,20 +261,36 @@ def body(p, headless=False):
             if p['sleeveless'] and y < TORSO_TOP + 4 and x in (TORSO_LEFT, TORSO_RIGHT):
                 mat = 'skin'
             L.paint(x, y, 'torso', mat, bias)
-    # Shorts, legs split a few rows down
-    for y in range(TORSO_BOTTOM + 2, p['shorts_bottom'] + 1):
-        for x in range(TORSO_LEFT, TORSO_RIGHT + 1):
-            if y >= TORSO_BOTTOM + 4 and x in (12, 13):
-                continue
-            L.paint(x, y, 'shorts', p['shorts'], (12.5 - x) / 16)
+    if p.get('skirt'):
+        # Pleated skirt flaring out from the waist
+        for y in range(TORSO_BOTTOM + 1, p['shorts_bottom'] + 1):
+            flare = (y - TORSO_BOTTOM) // 2
+            for x in range(TORSO_LEFT - flare, TORSO_RIGHT + flare + 1):
+                pleat = 0.25 if (x // 2) % 2 else -0.25
+                L.paint(x, y, 'skirt', p['shorts'], (12.5 - x) / 16 + pleat)
+    else:
+        # Shorts, legs split a few rows down
+        for y in range(TORSO_BOTTOM + 2, p['shorts_bottom'] + 1):
+            for x in range(TORSO_LEFT, TORSO_RIGHT + 1):
+                if y >= TORSO_BOTTOM + 4 and x in (12, 13):
+                    continue
+                L.paint(x, y, 'shorts', p['shorts'], (12.5 - x) / 16)
     if headless:
         L.rect(HEAD_X + 10, 41, HEAD_X + 13, 44, 'neck', 'skin', -0.3)
         L.rect(HEAD_X + 10, 40, HEAD_X + 13, 41, 'stump', 'blood', 0.4)
         for x, depth in ((9, 3), (10, 6), (11, 2), (12, 8), (13, 4), (14, 5), (15, 2)):
             L.rect(x, TORSO_TOP, x, TORSO_TOP + depth, 'gore', 'blood', -0.2)
         return L.render()
-    paint_head(L, p['hair'], p['headband'])
-    face(L, p['smile'], p['brows'])
+    paint_head(L, p['hair'], p['headband'], p.get('hairstyle', 'long'))
+    if p.get('ponytail'):
+        # Long ponytail from the back of the head down the back (the left, as the art faces right), behind the
+        # left arm
+        for y in range(24, 60):
+            x0, w = (1, 3) if y < 54 else (2, 2)
+            for x in range(x0, x0 + w):
+                if L.region[y][x] is None:
+                    L.paint(x, y, 'hair', p['hair'], 0.3 * math.sin(y * 0.9))
+    face(L, p['smile'], p['brows'], p.get('lips', "Ll"), p.get('lashes', False))
     return L.render(SPHERE)
 
 def agassi_shirt(x, y):
@@ -260,6 +298,12 @@ def agassi_shirt(x, y):
 
 def nadal_shirt(x, y):
     return 'lime'
+
+def graf_shirt(x, y):
+    return 'red' if y < TORSO_TOP + 3 and 11 <= x <= 14 else 'white'     # Red V collar
+
+def sharapova_shirt(x, y):
+    return 'grey' if y == TORSO_TOP and x % 3 == 1 else 'black'          # Crystals along the neckline
 
 # --- Leg frames: stand, left foot up, stand, right foot up ----------------------------------------------
 
@@ -382,19 +426,27 @@ BABY_ORB = (8, 26, 2.3)
 BABY_RACKET = 0.65
 
 def baby_hair(L, p):
-    """Agassi: a blond curl on a nearly bald head. Nadal: a brown mop with his red headband."""
-    cx, cy, rx, ry = BABY_HEAD
-    cap = 3 if p['hair'] == 'blond' else 6
+    """By p['baby']: 'tuft', a curl on a nearly bald head (Agassi); 'mop', with the sides down (Nadal, plus his
+    headband); 'bow', a cap of hair with a red bow (Graf); 'pony', a little ponytail at the back (Sharapova)."""
+    style = p['baby']
+    cap = {'tuft': 3, 'mop': 6, 'bow': 5, 'pony': 4}[style]
     for y in range(BABY_H):
         for x in range(W):
             if L.region[y][x] != 'face':
                 continue
-            side = p['hair'] != 'blond' and y < 10 and (x < 5 or x > 20)
+            side = style == 'mop' and y < 10 and (x < 5 or x > 20)
             if y < cap or side:
                 L.paint(x, y, 'hair', p['hair'], 0.3 * math.sin(x * 1.9))
-    if p['hair'] == 'blond':                    # The curl sticking up
+    if style == 'tuft':                         # The curl sticking up
         for x, y in ((12, 0), (13, 0), (14, 0), (14, 1)):
-            L.paint(x, y, 'hair', 'blond', 0.4)
+            L.paint(x, y, 'hair', p['hair'], 0.4)
+    elif style == 'bow':
+        for x, y in ((6, 2), (6, 3), (6, 4), (7, 3), (8, 3), (9, 3), (10, 2), (10, 3), (10, 4)):
+            L.paint(x, y, 'bow', 'red', 0.3)
+    elif style == 'pony':
+        for x, y in ((3, 7), (2, 8), (3, 8), (2, 9), (3, 9), (2, 10), (3, 10), (2, 11), (3, 12)):
+            L.paint(x, y, 'pony', p['hair'], 0.2)
+        L.paint(4, 6, 'tie', 'pink', 0.3)
     if p['headband']:
         for y in (5, 6):
             for x in range(W):
@@ -402,9 +454,8 @@ def baby_hair(L, p):
                     L.paint(x, y, 'band', 'red')
 
 def baby_face(L, p):
-    brow = 'h' if p['hair'] != 'blond' else 'z'
     for x in (7, 8, 15, 16):
-        L.pixel(x, 8, brow)
+        L.pixel(x, 8, p['baby_brow'])
     for x0 in (7, 15):                          # Big eyes with a highlight
         for y in (10, 11, 12):
             L.pixel(x0, y, 'k')
@@ -424,7 +475,8 @@ def baby_body(p, headless=False):
     for y in range(top, bottom + 1):            # Chubby onesie, the belly bulging
         bulge = 1 if 22 <= y <= 27 else 0
         for x in range(7 - bulge, 19 + bulge):
-            L.paint(x, y, 'torso', p['shirt'](x, y), (12.5 - x) / 10 - (0.6 if y < top + 2 else 0))
+            shirt = p['shirt'](x, y - top + TORSO_TOP)     # The adult pattern, collar at the top
+            L.paint(x, y, 'torso', shirt, (12.5 - x) / 10 - (0.6 if y < top + 2 else 0))
     for y in range(bottom + 1, BABY_DIAPER_BOTTOM + 1):
         for x in range(7, 19):
             if y == BABY_DIAPER_BOTTOM and x in (12, 13):
@@ -497,12 +549,21 @@ def baby_layers(p):
 PLAYERS = {
     # Agassi, early 90s: highlighted blond mullet, tan, easy smile, black and neon-pink shirt, acid-wash denim
     'AGASSI': dict(hair='blond', headband=False, smile=True, shirt=agassi_shirt, sleeveless=False,
-                   shorts='denim', shorts_bottom=63, shoe_accent='pink', racket='grey',
+                   shorts='denim', shorts_bottom=63, shoe_accent='pink', racket='grey', baby='tuft', baby_brow='z',
                    brows=[(x, 'z') for x in range(5, 10)] + [(x, 'z') for x in range(16, 21)]),
     # Nadal, mid 2000s: long dark hair, red headband, heavy brows, sleeveless lime top, white pirate capris
     'NADAL': dict(hair='brown', headband=True, smile=False, shirt=nadal_shirt, sleeveless=True,
-                  shorts='white', shorts_bottom=67, shoe_accent='lime', racket='yellow',
+                  shorts='white', shorts_bottom=67, shoe_accent='lime', racket='yellow', baby='mop', baby_brow='h',
                   brows=[(x, 'xh') for x in range(5, 10)] + [(x, 'xh') for x in range(16, 21)]),
+    # Graf, late 80s: golden blond bob with bangs, lashes, serious look, white top with a red V collar, white pleated skirt
+    'GRAF': dict(hair='honey', hairstyle='bob', headband=False, smile=False, shirt=graf_shirt, sleeveless=False, lashes=True,
+                 shorts='white', skirt=True, shorts_bottom=63, shoe_accent='red', racket='red', baby='bow',
+                 baby_brow='f', brows=[(x, 'F') for x in range(5, 10)] + [(x, 'F') for x in range(16, 21)]),
+    # Sharapova, mid 2000s: platinum hair pulled back into a long ponytail, red lipstick, the black dress with crystals at the neckline
+    'SHARAPOVA': dict(hair='plat', hairstyle='pulled', headband=False, smile=True, lips="r^", shirt=sharapova_shirt, sleeveless=True,
+                      lashes=True, ponytail=True, shorts='black', skirt=True, shorts_bottom=61, shoe_accent='pink',
+                      racket='white', baby='pony', baby_brow='z',
+                      brows=[(x, 'z') for x in range(5, 10)] + [(x, 'z') for x in range(16, 21)]),
 }
 
 def racket(p):
@@ -584,10 +645,12 @@ def previews(built):
             img = img.transpose(Image.FLIP_LEFT_RIGHT)
         return img.resize((W * scale, h * scale), Image.NEAREST)
 
-    def pair(a_stack, n_stack):
-        a, n = compose(a_stack), compose(n_stack, mirror=True)
-        img = Image.new('RGB', (a.width * 2 + pad * 3, a.height + pad * 2), bg)
-        img.paste(a, (pad, pad)); img.paste(n, (a.width + pad * 2, pad))
+    def lineup(stacks):
+        """Side by side, every other one mirrored as the right-hand player"""
+        imgs = [compose(st, mirror=i % 2 == 1) for i, st in enumerate(stacks)]
+        img = Image.new('RGB', ((imgs[0].width + pad) * len(imgs) + pad, imgs[0].height + pad * 2), bg)
+        for i, im in enumerate(imgs):
+            img.paste(im, (pad + i * (im.width + pad), pad))
         return img
 
     def stack(pl, step=0, left=0, arm=0, headless=False):
@@ -596,7 +659,7 @@ def previews(built):
 
     for name in built:
         compose(stack(name)).save(f"assets/{name.lower()}.png")
-    pair(stack('AGASSI'), stack('NADAL')).save("assets/players.png")
+    lineup([stack(name) for name in built]).save("assets/players.png")
 
     # Sheet: step cycle, swing, the hadouken charge and thrust, then the fatality (unarmed throw, headless)
     cells = ([stack('AGASSI', step=i) for i in range(STEP_FRAMES)] +
@@ -614,24 +677,24 @@ def previews(built):
 
     # Animated GIF: both players walking, swinging, then throwing a hadouken, as in game
     def both(**kw):
-        return pair(stack('AGASSI', **kw), stack('NADAL', **kw))
+        return lineup([stack(name, **kw) for name in built])
     frames = [both(step=i % 4) for i in range(8)]
     frames += [both(arm=f) for f in (2, 2, 3, 3, 3, 1, 1, 0, 0, 0)]
     frames += [both(left=1, arm=CHARGE)] * 5 + [both(left=2, arm=THRUST)] * 5 + [both()] * 3
     frames[0].save("assets/players.gif", save_all=True, append_images=frames[1:], duration=90, loop=0)
 
-    # Babies: both standing, swinging, charging and throwing, then headless
+    # Babies: each standing, swinging, charging and throwing, then headless
     def baby(pl, step=0, left=0, arm=0, headless=False, mirror=False):
         b = built[pl]['baby']
         return compose([b['headless' if headless else 'body'], b['legs'][step], b['left'][left], b['arm'][arm]],
                        mirror, BABY_H)
-    cells = [baby('AGASSI'), baby('AGASSI', step=1, arm=2), baby('AGASSI', left=1, arm=CHARGE),
-             baby('AGASSI', left=2, arm=THRUST), baby('AGASSI', headless=True),
-             baby('NADAL', mirror=True), baby('NADAL', step=3, arm=3, mirror=True),
-             baby('NADAL', left=1, arm=CHARGE, mirror=True), baby('NADAL', left=2, arm=THRUST, mirror=True),
-             baby('NADAL', headless=True, mirror=True)]
+    cells = []
+    for i, name in enumerate(built):
+        m = i % 2 == 1
+        cells += [baby(name, mirror=m), baby(name, step=1, arm=2, mirror=m), baby(name, left=1, arm=CHARGE, mirror=m),
+                  baby(name, left=2, arm=THRUST, mirror=m), baby(name, headless=True, mirror=m)]
     cw, ch = cells[0].width + pad, cells[0].height + pad
-    sheet = Image.new('RGB', (cw * 5 + pad, ch * 2 + pad), bg)
+    sheet = Image.new('RGB', (cw * 5 + pad, ch * len(built) + pad), bg)
     for i, im in enumerate(cells):
         sheet.paste(im, (pad + (i % 5) * cw, pad + (i // 5) * ch))
     sheet.save("assets/babies.png")

@@ -5,12 +5,15 @@
 #include "SDL2/SDL.h"
 #include "game.h"
 
-typedef enum { PLAYER_AGASSI, PLAYER_NADAL, PLAYER_COUNT } PlayerLook;
+typedef enum { PLAYER_AGASSI, PLAYER_NADAL, PLAYER_GRAF, PLAYER_SHARAPOVA, PLAYER_COUNT } PlayerLook;
 
 void init_player_sprites(SDL_Renderer *renderer);
 void free_player_sprites(void);
 void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool faces_right);
+void draw_player_portrait(SDL_Renderer *renderer, PlayerLook look, int x, int y, int scale, bool faces_right);
 const char *player_name(PlayerLook look);
+bool player_is_female(PlayerLook look);      // FINISH HER instead of FINISH HIM
+SDL_Color player_hair_color(PlayerLook look);  // For the head's chunks in a fatality
 
 // Screen positions of sprite features, for the fatality and the rift
 typedef enum { POINT_HAND, POINT_FACE, POINT_NECK, POINT_FEET } PlayerPoint;
