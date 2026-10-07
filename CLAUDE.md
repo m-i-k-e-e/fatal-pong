@@ -11,7 +11,9 @@ Everything builds inside the `ps5` toolbox (Ubuntu 24.04), which has the PS5 pay
 
 ```sh
 toolbox run -c ps5 make               # target/install/eboot.elf + sce_sys/icon0.png
-toolbox run -c ps5 make dist          # target/dist/fatal-pong-$(VERSION).zip and .elf (VERSION ?= 1.0.0)
+toolbox run -c ps5 make dist          # target/dist/fatal-pong-$(VERSION).zip and .elf, fatal-pong-installer-$(VERSION).elf (VERSION ?= 1.0.0)
+toolbox run -c ps5 make installer     # target/fatal-pong-installer.elf: the home screen tile installer
+toolbox run -c ps5 make install-shortcut  # send the installer to elfldr: adds/updates the home screen tile
 toolbox run -c ps5 make screenshots   # assets/screenshots/: {start,pause,win,mole,earthquake,frog-rain,finale}.png and a GIF per scene
 toolbox run -c ps5 make install       # FTP upload to /data/homebrew/fatal-pong (PS5_HOST, ftpsrv on 2121)
 toolbox run -c ps5 make test          # send the bare ELF to elfldr (port 9021)
@@ -43,6 +45,7 @@ through `bash -c '...'`.
 | `text.c` | 5x7 bitmap font (the SDK has no SDL_ttf) |
 | `particles.c` | Fire trails and explosions |
 | `audio.c` | Embedded WAV clips (announcer, hadouken, racket boomerang, fatality scream, grunts), synthesized hadouken fallback, lightsaber and Force, splat, rift, mole, quake, croak, tongue and spit sounds, software mixer |
+| `installer.c` | Separate payload (`make installer`): embeds eboot.elf, the icon and `assets/shortcut/` (`param.json`, `launch.html`), writes them to `/user/app/PONG00001/` and registers the home screen tile (`sceAppInstUtilAppInstallTitleDir`, resolved by NID); the tile's deeplink opens `launch.html` through websrv, which starts the game via `/hbldr`, so websrv must be running |
 | `tools/gen_sprites.py` | Generates `player_sprites.inc` (sprites + palette) and the `assets/` previews |
 | `tools/gen_bonus_icons.py` | Generates `bonus_icons.inc` (the eight 16x16 bonus icons + palette, in `BonusType` order) and `assets/bonus_icons.png` |
 | `tools/gen_voice.sh` | Generates the announcer clips (`agassi-wins`, `nadal-wins`, `graf-wins`, `sharapova-wins`, `finish-him`, `finish-her`, `fatality` .mp3) with Piper TTS (voice `en_US-ryan-high`) + ffmpeg; pass clip names to regenerate only those |

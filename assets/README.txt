@@ -21,6 +21,13 @@ Bare payload:
 
 Everything (sounds included) is inside the executable; no other files are needed.
 
+Home screen tile (optional):
+  Send fatal-pong-installer-<version>.elf to your ELF loader once. A notification
+  confirms it, and a Fatal Pong tile appears on the home screen (it may land in
+  the Media category). Selecting it starts the game through websrv, so websrv has
+  to be running (load it at startup with your payload manager). Send a newer
+  installer to update the game behind the tile.
+
 
 CONTROLS
 --------

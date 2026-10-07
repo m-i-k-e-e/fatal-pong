@@ -67,6 +67,22 @@ clean:
 test: $(TARGET)
 	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $^
 
+# Home screen installer (installer.c): a payload carrying the game, its icon and the tile's metadata, which
+# installs a Fatal Pong tile; the tile starts the game through websrv
+INSTALLER   := $(BUILD_DIR)/$(APP_NAME)-installer.elf
+SHORTCUT    := assets/shortcut/param.json assets/shortcut/launch.html
+
+$(INSTALLER): installer.c $(TARGET) assets/icon0.png $(SHORTCUT) | $(BUILD_DIR)
+	$(CC) -O2 -Wall -DEMBED_EBOOT=\"$(CURDIR)/$(TARGET)\" -DEMBED_ICON=\"$(CURDIR)/assets/icon0.png\" \
+		-DEMBED_PARAM=\"$(CURDIR)/assets/shortcut/param.json\" -DEMBED_LAUNCH=\"$(CURDIR)/assets/shortcut/launch.html\" \
+		$< -o $@ -lSceIpmi -lSceAppInstUtil
+
+installer: $(INSTALLER)
+
+# Send the installer to elfldr: adds (or updates) the Fatal Pong tile on the home screen
+install-shortcut: $(INSTALLER)
+	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $^
+
 # Upload as a homebrew app for websrv's launcher (needs ftpsrv.elf running on the PS5)
 PS5_FTP_PORT ?= 2121
 HB_DIR       := /data/homebrew/$(APP_NAME)
@@ -75,14 +91,16 @@ install: all
 	curl --ftp-create-dirs -T $(TARGET) ftp://$(PS5_HOST):$(PS5_FTP_PORT)$(HB_DIR)/eboot.elf
 	curl --ftp-create-dirs -T $(ICON) ftp://$(PS5_HOST):$(PS5_FTP_PORT)$(HB_DIR)/sce_sys/icon0.png
 
-# Release files: a zip of the homebrew folder for the launcher, and the same executable as a bare payload
-dist: all assets/README.txt
+# Release files: a zip of the homebrew folder for the launcher, the same executable as a bare payload, and the
+# home screen installer
+dist: all $(INSTALLER) assets/README.txt
 	rm -rf $(DIST_DIR)
 	mkdir -p $(DIST_DIR)/$(APP_NAME)
 	cp -r $(INSTALL_DIR)/. $(DIST_DIR)/$(APP_NAME)/
 	cp assets/README.txt $(DIST_DIR)/$(APP_NAME)/
 	cd $(DIST_DIR) && zip -qr $(APP_NAME)-$(VERSION).zip $(APP_NAME)
 	cp $(TARGET) $(DIST_DIR)/$(APP_NAME)-$(VERSION).elf
+	cp $(INSTALLER) $(DIST_DIR)/$(APP_NAME)-installer-$(VERSION).elf
 	rm -rf $(DIST_DIR)/$(APP_NAME)
 	@ls -l $(DIST_DIR)
 
@@ -137,4 +155,4 @@ screenshots: $(BUILD_DIR)/screenshots
 	rm -rf $(FRAMES_DIR)
 	@ls -l $(SHOT_DIR)
 
-.PHONY: all clean test install dist screenshots
+.PHONY: all clean test install installer install-shortcut dist screenshots
