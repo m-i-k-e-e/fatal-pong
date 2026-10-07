@@ -1,6 +1,7 @@
 #include "hud.h"
 #include "bonus.h"
 #include "text.h"
+#include "input.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -201,10 +202,11 @@ void draw_start_screen(SDL_Renderer *renderer, Uint32 ticks, PlayerLook p1_look,
 
     if ((ticks / 500) % 2 == 0) {
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-        draw_text_centered(renderer, "PLAYER 1: PRESS X TO START", SCREEN_WIDTH / 2, 860, 6);
+        draw_text_centered(renderer, "PLAYER 1: PRESS " KEY_HINT("X", "SPACE") " TO START", SCREEN_WIDTH / 2, 860, 6);
     }
     SDL_SetRenderDrawColor(renderer, 160, 160, 170, 255);
-    draw_text_centered(renderer, "LEFT / RIGHT: CHOOSE PLAYER      OPTIONS: HOW TO PLAY", SCREEN_WIDTH / 2, 960, 4);
+    draw_text_centered(renderer, "LEFT / RIGHT: CHOOSE PLAYER      " KEY_HINT("OPTIONS", "ESC") ": HOW TO PLAY",
+                       SCREEN_WIDTH / 2, 960, 4);
 }
 
 // --- Dripping text (blood, mud, crumbling rock, slime) ---
@@ -399,7 +401,7 @@ void draw_win_screen(SDL_Renderer *renderer, const char *winner, int winner_scor
 
     if (show_prompt && (frames / 30) % 2 == 0) {
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-        draw_text_centered(renderer, "PRESS X FOR A NEW MATCH", SCREEN_WIDTH / 2, 760, 5);
+        draw_text_centered(renderer, "PRESS " KEY_HINT("X", "SPACE") " FOR A NEW MATCH", SCREEN_WIDTH / 2, 760, 5);
     }
 }
 
@@ -415,9 +417,14 @@ void draw_finish_screen(SDL_Renderer *renderer, int frames, int frames_left, int
     draw_blood_text(renderer, her ? "FINISH HER!" : "FINISH HIM!", SCREEN_WIDTH / 2, 190, 14, frames);
 
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    int label_w = text_width("TRIANGLE X3", 4);
+#ifdef __PROSPERO__
+    const char *label = "TRIANGLE X3";
+#else
+    const char *label = "TRIANGLE (G OR RIGHT SHIFT) X3";
+#endif
+    int label_w = text_width(label, 4);
     int boxes_w = needed * 40 - 10, x = SCREEN_WIDTH / 2 - (label_w + 30 + boxes_w) / 2;
-    draw_text(renderer, "TRIANGLE X3", x, 430, 4);
+    draw_text(renderer, label, x, 430, 4);
     for (int i = 0; i < needed; i++) {                      // One box per press, filled as they land
         SDL_Rect box = { x + label_w + 30 + i * 40, 426, 30, 30 };
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);

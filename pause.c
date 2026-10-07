@@ -8,7 +8,11 @@
 #include <stdio.h>
 
 #define PANEL_W     1400
+#ifdef __PROSPERO__
 #define PANEL_H     900
+#else
+#define PANEL_H     980         // Room for the keyboard controls
+#endif
 #define PANEL_X     ((SCREEN_WIDTH - PANEL_W) / 2)
 #define PANEL_Y     ((SCREEN_HEIGHT - PANEL_H) / 2)
 #define TEXT_X      (PANEL_X + 70)
@@ -34,19 +38,11 @@ static int selected;            // The setting left/right changes
 static int held_x, held_y;      // -1, 0 or 1: the directions pushed last frame
 static int held_x_frames, held_y_frames;
 
-// Direction pushed on either pad along one axis: -1 left/up, 1 right/down, 0 neither (D-pad or left stick past
-// its dead zone)
-static int pad_dir(SDL_GameController *pad1, SDL_GameController *pad2, bool horizontal) {
+// Direction either player pushes along one axis: -1 left/up, 1 right/down, 0 neither
+static int pushed(const PlayerControls c[2], bool horizontal) {
     for (int i = 0; i < 2; i++) {
-        SDL_GameController *pad = i ? pad2 : pad1;
-        if (!pad) continue;
-        if (SDL_GameControllerGetButton(pad, horizontal ? SDL_CONTROLLER_BUTTON_DPAD_LEFT : SDL_CONTROLLER_BUTTON_DPAD_UP))
-            return -1;
-        if (SDL_GameControllerGetButton(pad, horizontal ? SDL_CONTROLLER_BUTTON_DPAD_RIGHT : SDL_CONTROLLER_BUTTON_DPAD_DOWN))
-            return 1;
-        Sint16 v = SDL_GameControllerGetAxis(pad, horizontal ? SDL_CONTROLLER_AXIS_LEFTX : SDL_CONTROLLER_AXIS_LEFTY);
-        if (v < -16000) return -1;
-        if (v > 16000) return 1;
+        if (horizontal ? c[i].left : c[i].up) return -1;
+        if (horizontal ? c[i].right : c[i].down) return 1;
     }
     return 0;
 }
@@ -60,12 +56,12 @@ static int repeat(int dir, int *held, int *frames) {
     return 0;
 }
 
-// Up/down on either pad picks a setting, left/right changes it by its step: once per press, then repeating
-// while held. Changes start_speed_percent and calamity_chance.
-void update_pause_menu(SDL_GameController *pad1, SDL_GameController *pad2) {
-    int dy = repeat(pad_dir(pad1, pad2, false), &held_y, &held_y_frames);
+// Up/down from either player picks a setting, left/right changes it by its step: once per press, then
+// repeating while held. Changes start_speed_percent and calamity_chance.
+void update_pause_menu(const PlayerControls controls[2]) {
+    int dy = repeat(pushed(controls, false), &held_y, &held_y_frames);
     selected = SDL_clamp(selected + dy, 0, SETTING_COUNT - 1);
-    int dx = repeat(pad_dir(pad1, pad2, true), &held_x, &held_x_frames);
+    int dx = repeat(pushed(controls, true), &held_x, &held_x_frames);
     Setting *s = &settings[selected];
     *s->value = SDL_clamp(*s->value + dx * s->step, s->min, s->max);
 }
@@ -184,7 +180,17 @@ void draw_pause_menu(SDL_Renderer *renderer) {
     }
 
     // Footer
+#ifndef __PROSPERO__
+    // Keyboard controls (see input.c)
+    SDL_SetRenderDrawColor(renderer, 0, 220, 255, 255);
+    draw_text(renderer, "KEYBOARD", TEXT_X, PANEL_Y + PANEL_H - 205, 3);
+    SDL_SetRenderDrawColor(renderer, 220, 220, 230, 255);
+    int keys_x = TEXT_X + text_width("KEYBOARD", 3) + 30;
+    draw_text(renderer, "P1: WASD, F = SQUARE, G = TRIANGLE, SPACE = X", keys_x, PANEL_Y + PANEL_H - 205, 3);
+    draw_text(renderer, "P2: ARROWS, RIGHT CTRL = SQUARE, RIGHT SHIFT = TRIANGLE", keys_x, PANEL_Y + PANEL_H - 175, 3);
+#endif
     draw_settings(renderer, PANEL_Y + PANEL_H - 128);
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    draw_text_centered(renderer, "OPTIONS: RESUME      TOUCHPAD + OPTIONS: QUIT", SCREEN_WIDTH / 2, PANEL_Y + PANEL_H - 42, 3);
+    draw_text_centered(renderer, KEY_HINT("OPTIONS", "ESC") ": RESUME      " KEY_HINT("TOUCHPAD + OPTIONS", "Q") ": QUIT",
+                       SCREEN_WIDTH / 2, PANEL_Y + PANEL_H - 42, 3);
 }

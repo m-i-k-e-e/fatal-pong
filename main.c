@@ -11,6 +11,7 @@
 #include "bonus.h"
 #include "fatality.h"
 #include "fireball.h"
+#include "input.h"
 #include "rift.h"
 #include "calamity.h"
 #include "hud.h"
@@ -21,27 +22,14 @@
 
 #define WIN_SCREEN_MIN_FRAMES   90      // Win screen shows at least 1.5 s before Cross starts a new match
 
+#ifdef __PROSPERO__
 // libkernel direct memory queries (no public header in the SDK)
 size_t sceKernelGetDirectMemorySize(void);
 int sceKernelAvailableDirectMemorySize(off_t start, off_t end, size_t align, off_t *phys_out, size_t *size_out);
-
-// Vertical input in [-1, 1] from the D-pad, falling back to a stick axis past its dead zone
-static float read_direction(SDL_GameController *pad, SDL_GameControllerAxis axis) {
-    if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_UP)) return -1.0f;
-    if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN)) return 1.0f;
-    Sint16 value = SDL_GameControllerGetAxis(pad, axis);
-    return abs(value) > 8000 ? value / 32767.0f : 0.0f;
-}
-
-// Left/right for the character select: -1, 1 or 0 from the D-pad or left stick, or only the right stick for the
-// second player on a shared pad
-static int read_choice(SDL_GameController *pad, bool right_stick) {
-    if (!pad) return 0;
-    if (!right_stick && SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT)) return -1;
-    if (!right_stick && SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) return 1;
-    Sint16 x = SDL_GameControllerGetAxis(pad, right_stick ? SDL_CONTROLLER_AXIS_RIGHTX : SDL_CONTROLLER_AXIS_LEFTX);
-    return x < -16000 ? -1 : x > 16000 ? 1 : 0;
-}
+#else
+#define WINDOW_W                1280    // Desktop window; the 1920x1080 game is scaled to fit (F11: fullscreen)
+#define WINDOW_H                720
+#endif
 
 // True while `p` is level with an invisible (ghost bonus) opponent: their vertical spans overlap, so it's
 // staring the ghost in the face
@@ -61,12 +49,14 @@ static void open_pad(int device_index, SDL_GameController **pad1, SDL_GameContro
 }
 
 // Set up SDL, the controllers and every module, then run the game at 60 FPS: start screen, play, pause,
-// and after the last point the FINISH / FATALITY / RESULT phases, until touchpad + Options quits
+// and after the last point the FINISH / FATALITY / RESULT phases, until touchpad + Options (or Q from the pause
+// screen, or closing the window) quits
 int main(int argc, char *argv[]) {
     (void)argc; (void)argv;
 
     printf("[pong] starting\n");
     srand((unsigned int)time(NULL));               // A different game every launch
+#ifdef __PROSPERO__
     {
         off_t phys = 0;
         size_t avail = 0;
@@ -74,22 +64,34 @@ int main(int argc, char *argv[]) {
         printf("[pong] direct memory: total=%zu MiB, largest free block=%zu MiB (rc=0x%x)\n",
                sceKernelGetDirectMemorySize() >> 20, avail >> 20, rc);
     }
+#endif
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) < 0) {
         printf("[pong] SDL_Init failed: %s\n", SDL_GetError());
         return 1;
     }
 
-    SDL_Window *window = SDL_CreateWindow("Fatal Pong",
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+#ifdef __PROSPERO__
+    SDL_Window *window = SDL_CreateWindow("Fatal Pong", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                                          SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+#else
+    SDL_Window *window = SDL_CreateWindow("Fatal Pong", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                                          WINDOW_W, WINDOW_H, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+#endif
     if (!window) {
         printf("[pong] SDL_CreateWindow failed: %s\n", SDL_GetError());
         SDL_Quit();
         return 1;
     }
 
+#ifdef __PROSPERO__
     // The PS5 SDL port only ships the software renderer (no GPU driver, no vsync flag)
     SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+#else
+    // On a desktop the GPU renderer when there is one; the game always draws 1920x1080, scaled to the window
+    SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    if (!renderer) renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+    if (renderer) SDL_RenderSetLogicalSize(renderer, SCREEN_WIDTH, SCREEN_HEIGHT);
+#endif
     if (!renderer) {
         printf("[pong] SDL_CreateRenderer failed: %s\n", SDL_GetError());
         SDL_DestroyWindow(window);
@@ -129,7 +131,7 @@ int main(int argc, char *argv[]) {
     int end_timer = 0;                             // Frames since the current end phase began
     int triangle_presses = 0;
     bool triangle_was_down = true;
-    bool options_was_down[2] = { false, false };   // For press-edge detection of the pause button
+    bool pause_was_down[2] = { false, false };     // For press-edge detection of the pause button
 
     const Uint32 frame_ms = 1000 / 60;
 
@@ -139,26 +141,29 @@ int main(int argc, char *argv[]) {
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) running = false;
             if (e.type == SDL_CONTROLLERDEVICEADDED) open_pad(e.cdevice.which, &pad1, &pad2);
+#ifndef __PROSPERO__
+            if (e.type == SDL_KEYDOWN && e.key.keysym.scancode == SDL_SCANCODE_F11 && !e.key.repeat) {
+                bool full = SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP;
+                SDL_SetWindowFullscreen(window, full ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP);
+            }
+#endif
         }
+        PlayerControls controls[2];
+        read_controls(pad1, pad2, controls);
 
-        // Options toggles pause; touchpad click + Options quits (PS5 has no window close button, and the
-        // SDK's pad driver never reports the Create/Share button)
+        // Options (Esc) toggles pause; touchpad click + Options quits (PS5 has no window close button, and the
+        // SDK's pad driver never reports the Create/Share button), and so does Q from the pause screen
         bool toggle_pause = false;
         for (int i = 0; i < 2; i++) {
-            SDL_GameController *pad = i == 0 ? pad1 : pad2;
-            if (!pad) continue;
-            bool touchpad = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_TOUCHPAD);
-            bool options = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_START);
-            if (touchpad && options) running = false;
-            else if (options && !options_was_down[i]) toggle_pause = true;
-            options_was_down[i] = options;
+            if (controls[i].quit || (paused && controls[i].quit_key)) running = false;
+            else if (controls[i].pause && !pause_was_down[i]) toggle_pause = true;
+            pause_was_down[i] = controls[i].pause;
         }
         if (toggle_pause) paused = !paused;
-        if (paused) update_pause_menu(pad1, pad2);
+        if (paused) update_pause_menu(controls);
 
         // Cross presses (edge) start the game from the start screen and a new match from the win screen
-        bool cross = (pad1 && SDL_GameControllerGetButton(pad1, SDL_CONTROLLER_BUTTON_A)) ||
-                     (started && pad2 && SDL_GameControllerGetButton(pad2, SDL_CONTROLLER_BUTTON_A));
+        bool cross = controls[0].confirm || (started && controls[1].confirm);
         bool cross_pressed = cross && !cross_was_down && !paused;
         cross_was_down = cross;
         if (!started && cross_pressed) started = true;
@@ -168,7 +173,7 @@ int main(int argc, char *argv[]) {
         // stick when sharing player 1's pad)
         if (!started && !paused) {
             for (int i = 0; i < 2; i++) {
-                int dir = i == 0 ? read_choice(pad1, false) : pad2 ? read_choice(pad2, false) : read_choice(pad1, true);
+                int dir = controls[i].left ? -1 : controls[i].right ? 1 : 0;
                 if (dir && dir != choice_was[i]) {
                     looks[i] = (PlayerLook)((looks[i] + dir + PLAYER_COUNT) % PLAYER_COUNT);
                     play_sound(&snd_paddle_hit);
@@ -179,19 +184,12 @@ int main(int argc, char *argv[]) {
 
         // Special move motions (hadouken, rift)
         if (winner == 0 && playing) {
-            // A shared pad is split in two halves (see update_special_input)
-            update_special_input(&p1, &p2, true, pad1, pad2 ? PAD_WHOLE : PAD_LEFT_HALF);
-            update_special_input(&p2, &p1, false, pad2 ? pad2 : pad1, pad2 ? PAD_WHOLE : PAD_RIGHT_HALF);
+            update_special_input(&p1, &p2, true, &controls[0]);
+            update_special_input(&p2, &p1, false, &controls[1]);
         }
 
-        // Movement Inputs (with a single pad, P2 uses its right stick)
-        float p1_dir = 0, p2_dir = 0;
-        if (pad1) p1_dir = read_direction(pad1, SDL_CONTROLLER_AXIS_LEFTY);
-        if (pad2) p2_dir = read_direction(pad2, SDL_CONTROLLER_AXIS_LEFTY);
-        else if (pad1) {
-            Sint16 axis_r = SDL_GameControllerGetAxis(pad1, SDL_CONTROLLER_AXIS_RIGHTY);
-            if (abs(axis_r) > 8000) p2_dir = axis_r / 32767.0f;
-        }
+        // Movement (with a single pad, P2 uses its right stick: see input.c)
+        float p1_dir = controls[0].move, p2_dir = controls[1].move;
 
         // End of match
         if (winner != 0 && playing) {
@@ -201,9 +199,8 @@ int main(int argc, char *argv[]) {
             fatality_update();
 
             if (end_phase == END_FINISH) {
-                // Triangle presses on the winner's controller (player 2 on the shared pad if there's only one)
-                SDL_GameController *champ_pad = winner == 1 ? pad1 : (pad2 ? pad2 : pad1);
-                bool triangle = champ_pad && SDL_GameControllerGetButton(champ_pad, SDL_CONTROLLER_BUTTON_Y);
+                // Triangle presses (G / Right Shift) on the winner's controls
+                bool triangle = controls[winner - 1].finish;
                 if (triangle && !triangle_was_down && ++triangle_presses >= FATALITY_PRESSES) {
                     fatality_start(champ, champ_look, winner == 1, loser, loser_look);
                     end_phase = END_FATALITY;

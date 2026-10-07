@@ -27,7 +27,7 @@ SOUNDS      += $(GRUNTS)
 CFLAGS   := -O2 -Wall $(shell $(PKG_CONFIG) --cflags sdl2) -DEMBED_DIR=\"$(CURDIR)/$(BUILD_DIR)/\"
 LDLIBS   := $(shell $(PKG_CONFIG) --static --libs sdl2) -lm
 
-SRCS     := main.c audio.c ball.c bonus.c calamity.c draw.c fatality.c fireball.c hud.c paddle.c particles.c pause.c players.c rift.c text.c
+SRCS     := main.c input.c audio.c ball.c bonus.c calamity.c draw.c fatality.c fireball.c hud.c paddle.c particles.c pause.c players.c rift.c text.c
 OBJS     := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 
 all: $(TARGET) $(ICON)
@@ -91,9 +91,9 @@ install: all
 	curl --ftp-create-dirs -T $(TARGET) ftp://$(PS5_HOST):$(PS5_FTP_PORT)$(HB_DIR)/eboot.elf
 	curl --ftp-create-dirs -T $(ICON) ftp://$(PS5_HOST):$(PS5_FTP_PORT)$(HB_DIR)/sce_sys/icon0.png
 
-# Release files: a zip of the homebrew folder for the launcher, the same executable as a bare payload, and the
-# home screen installer
-dist: all $(INSTALLER) assets/README.txt
+# Release files: a zip of the homebrew folder for the launcher, the same executable as a bare payload, the
+# home screen installer, and a tarball of the Linux build
+dist: all $(INSTALLER) $(LINUX_BIN) assets/README.txt
 	rm -rf $(DIST_DIR)
 	mkdir -p $(DIST_DIR)/$(APP_NAME)
 	cp -r $(INSTALL_DIR)/. $(DIST_DIR)/$(APP_NAME)/
@@ -102,13 +102,33 @@ dist: all $(INSTALLER) assets/README.txt
 	cp $(TARGET) $(DIST_DIR)/$(APP_NAME)-$(VERSION).elf
 	cp $(INSTALLER) $(DIST_DIR)/$(APP_NAME)-installer-$(VERSION).elf
 	rm -rf $(DIST_DIR)/$(APP_NAME)
+	mkdir -p $(DIST_DIR)/$(APP_NAME)
+	cp $(LINUX_BIN) assets/README.txt $(DIST_DIR)/$(APP_NAME)/
+	cd $(DIST_DIR) && tar czf $(APP_NAME)-linux-$(shell uname -m)-$(VERSION).tar.gz $(APP_NAME)
+	rm -rf $(DIST_DIR)/$(APP_NAME)
 	@ls -l $(DIST_DIR)
+
+# Native builds (the Linux game, the screenshot renderer): this machine's compiler and SDL2 dev files
+HOST_CC      ?= cc
+HOST_SDL      = $(shell pkg-config --cflags --libs sdl2)
+
+# Linux build: the same game in a resizable window (F11 fullscreen), playable with gamepads or the keyboard;
+# sounds are embedded, so the binary only needs the system's SDL2
+LINUX_DIR    := $(BUILD_DIR)/linux
+LINUX_BIN    := $(LINUX_DIR)/$(APP_NAME)
+
+$(LINUX_BIN): $(SRCS) $(wildcard *.h) player_sprites.inc bonus_icons.inc $(SOUNDS) | $(BUILD_DIR)
+	mkdir -p $(LINUX_DIR)
+	$(HOST_CC) -O2 -Wall -I. -DEMBED_DIR=\"$(CURDIR)/$(BUILD_DIR)/\" $(SRCS) -o $@ $(HOST_SDL) -lm
+
+linux: $(LINUX_BIN)
+
+run-linux: $(LINUX_BIN)
+	$(LINUX_BIN)
 
 # Promo screenshots (assets/screenshots/start, pause, win, mole, earthquake, frog-rain, finale .png and hadouken, rift, mole,
 # earthquake, frog-rain, win, fatality, finale .gif), rendered by tools/screenshots.c
 # with the real game code, built for this machine: needs a native compiler, SDL2 dev files and ffmpeg
-HOST_CC      ?= cc
-HOST_SDL      = $(shell pkg-config --cflags --libs sdl2)
 SHOT_DIR     := assets/screenshots
 FRAMES_DIR   := $(BUILD_DIR)/frames
 SHOT_SRCS    := tools/screenshots.c audio.c ball.c bonus.c draw.c fatality.c hud.c paddle.c particles.c pause.c players.c rift.c text.c
@@ -155,4 +175,4 @@ screenshots: $(BUILD_DIR)/screenshots
 	rm -rf $(FRAMES_DIR)
 	@ls -l $(SHOT_DIR)
 
-.PHONY: all clean test install installer install-shortcut dist screenshots
+.PHONY: all clean test install installer install-shortcut linux run-linux dist screenshots

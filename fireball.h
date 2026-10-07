@@ -4,6 +4,7 @@
 
 #include "SDL2/SDL.h"
 #include "game.h"
+#include "input.h"
 
 #define FIREBALL_W          44
 #define FIREBALL_H          30
@@ -12,10 +13,7 @@
 #define THROW_HAND_Y        (49.0f / 80.0f)  // Hands' height in the player sprites' thrust pose, 0 = top
 
 void reset_fireballs(void);
-// Which part of a controller a player uses: all of it, or one half when both players share it
-typedef enum { PAD_WHOLE, PAD_LEFT_HALF, PAD_RIGHT_HALF } PadPart;
-
-void update_special_input(Paddle *p, Paddle *opponent, bool is_p1, SDL_GameController *pad, PadPart part);
+void update_special_input(Paddle *p, Paddle *opponent, bool is_p1, const PlayerControls *c);
 void update_fireballs(Paddle *p1, Paddle *p2, Ball *ball);
 void draw_fireballs(SDL_Renderer *renderer);
 

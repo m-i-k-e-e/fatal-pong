@@ -2,7 +2,7 @@
 
 Two-player pong for jailbroken PS5s, written in C on SDL2: Street Fighter fireballs (hadouken), rifts that swallow the opponent, field
 bonuses, calamities (the mole and its molehills, the earthquake and its cracks, the frog rain), pixel-art tennis players picked on the start screen (Agassi, Nadal, Graf, Sharapova; Pop!-figure proportions), a grass court and a
-Mortal Kombat-style announcer. Runs as an ELF payload or from the websrv Homebrew Launcher.
+Mortal Kombat-style announcer. Runs as an ELF payload or from the websrv Homebrew Launcher, and natively on Linux (gamepads or keyboard).
 
 ## Build
 
@@ -11,7 +11,9 @@ Everything builds inside the `ps5` toolbox (Ubuntu 24.04), which has the PS5 pay
 
 ```sh
 toolbox run -c ps5 make               # target/install/eboot.elf + sce_sys/icon0.png
-toolbox run -c ps5 make dist          # target/dist/fatal-pong-$(VERSION).zip and .elf, fatal-pong-installer-$(VERSION).elf (VERSION ?= 1.0.0)
+toolbox run -c ps5 make dist          # target/dist/fatal-pong-$(VERSION).zip and .elf, fatal-pong-installer-$(VERSION).elf, fatal-pong-linux-<arch>-$(VERSION).tar.gz (VERSION ?= 1.0.0)
+toolbox run -c ps5 make linux         # target/linux/fatal-pong, native build with the toolbox's gcc and SDL2
+toolbox run -c ps5 make run-linux     # build and run it (resizable window, F11 fullscreen)
 toolbox run -c ps5 make installer     # target/fatal-pong-installer.elf: the home screen tile installer
 toolbox run -c ps5 make install-shortcut  # send the installer to elfldr: adds/updates the home screen tile
 toolbox run -c ps5 make screenshots   # assets/screenshots/: {start,pause,win,mole,earthquake,frog-rain,finale}.png and a GIF per scene
@@ -29,7 +31,8 @@ through `bash -c '...'`.
 
 | File | Role |
 |---|---|
-| `main.c` | SDL setup, controller handling, game states (start screen with the character select, playing, paused, then FINISH / FATALITY / RESULT after the last point), main loop |
+| `main.c` | SDL setup (PS5: full-size window, software renderer; Linux: resizable window scaled with `SDL_RenderSetLogicalSize`, F11 fullscreen), controller hot-plug, game states (start screen with the character select, playing, paused, then FINISH / FATALITY / RESULT after the last point), main loop |
+| `input.c` | `read_controls()`: each frame, both players' controls (`PlayerControls`: move, directions, punch, finish, confirm, pause, quit) from their gamepad, half of a shared pad, or the keyboard (P1 WASD/F/G/Space/Esc/Q, P2 arrows/Right Ctrl/Right Shift); `KEY_HINT()` adds the keys to on-screen hints outside the PS5 build |
 | `game.h` | Shared constants, `BonusType`, `Paddle`, `Ball`, `rects_overlap` |
 | `paddle.c` | Movement (speed scale, bonus effects, stun), animation state (`stride`, `moving`, timers) |
 | `ball.c` | Ball physics, paddle hits, rally speed-up (`speed_scale`, on top of `ball_base_speed()`), zig-zag, grunts |
@@ -74,6 +77,10 @@ the build uses the SDK's SDL2 headers.
 - Rendering is SDL's software renderer only (the PS5 port has no GPU driver). Avoid per-pixel work every
   frame: precompute into textures at startup like the court and sprites.
 - Screen is 1920x1080.
+- Game code reads input only through `PlayerControls` (input.c), never the pads directly, so the keyboard works
+  everywhere. PS5-only code (libkernel calls, the software-only renderer, pad-only hints) goes under
+  `#ifdef __PROSPERO__` (predefined by prospero-clang); the Linux build is everything else, built with the
+  toolbox's native gcc.
 
 ## Sprites
 

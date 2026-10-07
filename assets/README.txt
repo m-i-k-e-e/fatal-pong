@@ -21,6 +21,11 @@ Bare payload:
 
 Everything (sounds included) is inside the executable; no other files are needed.
 
+Linux:
+  Unpack fatal-pong-linux-<arch>-<version>.tar.gz and run ./fatal-pong/fatal-pong. It
+  only needs SDL2 (on most distributions it's already installed: package libsdl2 /
+  SDL2). Plug in one or two gamepads or use the keyboard.
+
 Home screen tile (optional):
   Send fatal-pong-installer-<version>.elf to your ELF loader once. A notification
   confirms it, and a Fatal Pong tile appears on the home screen (it may land in
@@ -44,6 +49,13 @@ CONTROLS
 
 With one controller, it's split in two: player 1 moves with the D-pad or left stick and uses L1
 for the specials, player 2 moves with the right stick and uses Square or R1.
+
+Keyboard (Linux build):
+  Player 1           W/S move, A/D left/right, F = Square, G = Triangle
+  Player 2           Arrow keys, Right Ctrl (or .) = Square, Right Shift (or /) = Triangle
+  Start / confirm    Space or Enter
+  Pause / help       Esc            Quit: Q on the pause screen, or close the window
+  Fullscreen         F11
 
 In the pause menu, up/down picks a setting and left/right changes it: the speed of the ball
 and the players (50 to 200%) and the calamity chance.
