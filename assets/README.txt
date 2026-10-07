@@ -75,7 +75,9 @@ Bonuses appear in the paddle lanes; move onto one to collect it. Effects last
 
   Green (good)                      Red (bad)
   GROW     double paddle height     SHRINK   half paddle height (you're a baby)
+           (under a very tall hat)
   FULL     Vader or Luke holds the  GHOST    paddle invisible (still blocks)
            whole lane with the Force
   FAST     faster paddle            SLOW     slower paddle (ball and chain)
   ZIG-ZAG  balls you hit zig-zag    INVERT   up and down swapped
+           (and you go cross-eyed)

@@ -7,6 +7,8 @@
 // bonuses visibly resize the player. Art faces right with the racket on the front side; the right-hand player is mirrored.
 // The collision box stays the paddle rect, its front edge lined up with art column FRONT_COL.
 // A shrunk player is drawn as a baby: the same layers and poses on a 32x40 canvas (square pixels at half height).
+// A grown one keeps their normal size at the bottom of the double-height paddle and wears a hat that fills the
+// rest: a tall top hat for the men, a towering Ascot hat for the ladies.
 // With the full-height bonus a force user stands in instead (Vader or Luke, Paddle.force_user): FORCE_SCALE
 // times the art, in the middle of the lane, pushing the Force (force_push) where the ball comes back.
 #define SPRITE_W            32
@@ -102,6 +104,8 @@ static float force_x[2], force_y[2];    // Where the wave is aimed
 static SDL_Texture *rackets[PLAYER_COUNT];
 static bool sprites_ok;
 static SDL_Texture *iron_ball;
+static SDL_Texture *crossed_eyes;       // Zig-zag bonus, over the face
+static SDL_Texture *hats[2];            // Grow bonus: top hat (men), Ascot hat (ladies)
 static float chain_ball_y[2];           // Dragged ball and chain, per side (0 = left player): its screen y
 static bool chain_on[2];                // Drawn last frame, so a fresh one starts at rest
 
@@ -178,6 +182,9 @@ void init_player_sprites(SDL_Renderer *renderer) {
             sprites_ok &= (f->arm[a] = build_sized(renderer, FORCE_ARMS[i][a], SPRITE_W, SPRITE_H)) != NULL;
     }
     iron_ball = build_iron_ball(renderer);
+    sprites_ok &= (crossed_eyes = build_sized(renderer, CROSSED_EYES, SPRITE_W, SPRITE_H)) != NULL;
+    sprites_ok &= (hats[0] = build_sized(renderer, TOP_HAT, SPRITE_W, HAT_H)) != NULL;
+    sprites_ok &= (hats[1] = build_sized(renderer, LADY_HAT, SPRITE_W, HAT_H)) != NULL;
     if (!sprites_ok) printf("[pong] player sprites failed, drawing plain paddles: %s\n", SDL_GetError());
 }
 
@@ -209,12 +216,20 @@ void free_player_sprites(void) {
         for (int a = 0; a < FORCE_ARM_POSES; a++) destroy(&force_tex[i].arm[a]);
     }
     destroy(&iron_ball);
+    destroy(&crossed_eyes);
+    destroy(&hats[0]);
+    destroy(&hats[1]);
     sprites_ok = false;
 }
 
 // A shrunk player is drawn (and aimed at) as the baby
 static bool is_baby(const Paddle *p) {
     return p->effect == BONUS_SHRINK;
+}
+
+// A grown paddle is drawn (and aimed at) as the player at normal size, standing at its bottom, under a hat
+static bool is_hatted(const Paddle *p) {
+    return p->effect == BONUS_GROW;
 }
 
 // A full-height paddle is drawn (and aimed at) as its force user
@@ -266,6 +281,9 @@ static SDL_Rect sprite_rect(const Paddle *p, bool faces_right) {
     if (force) {                    // Life size in the middle of the lane, not stretched over the whole height
         dst.h = SPRITE_H * FORCE_SCALE;
         dst.y = (SCREEN_HEIGHT - dst.h) / 2;
+    } else if (is_hatted(p)) {      // Normal size at the bottom; the hat fills the top
+        dst.h = SPRITE_H * SPRITE_SCALE;
+        dst.y = (int)(p->y + p->h) - dst.h;
     }
     return dst;
 }
@@ -287,6 +305,14 @@ void draw_racket(SDL_Renderer *renderer, PlayerLook look, int cx, int cy, double
     int w = RACKET_W * RACKET_SCALE, h = RACKET_H * RACKET_SCALE;
     SDL_Rect dst = { cx - w / 2, cy - h / 2, w, h };
     SDL_RenderCopyEx(renderer, rackets[look], NULL, &dst, angle, NULL, SDL_FLIP_NONE);
+}
+
+// Colour a layer for this frame: purple while sinking through a rift (`depth` > 0), blue on a stun `flash`,
+// otherwise untouched
+static void tint(SDL_Texture *tex, float depth, bool flash) {
+    if (depth > 0.0f) SDL_SetTextureColorMod(tex, 200, 140, 255);
+    else if (flash) SDL_SetTextureColorMod(tex, 90, 130, 255);
+    else SDL_SetTextureColorMod(tex, 255, 255, 255);
 }
 
 // One chain link, a few pixels on the SPRITE_SCALE grid: flat (`flat`) or edge-on, lit along its top
@@ -382,7 +408,8 @@ static void draw_force_wave(SDL_Renderer *renderer, const Paddle *p, bool faces_
 
 // Flashes blue while stunned; hidden, shadow included, while ghosted; sinks into the ground through a rift,
 // tinted purple and cut off at the feet line; a baby while shrunk; dragging a ball and chain while slowed;
-// Vader or Luke, pushing the Force, with the full-height bonus
+// Vader or Luke, pushing the Force, with the full-height bonus; cross-eyed with the zig-zag bonus; in a hat,
+// at normal size, with the grow bonus
 void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool faces_right) {
     float depth = vanish_depth(p);
     bool chained = p->effect == BONUS_SLOW && depth <= 0.0f && sprites_ok;
@@ -399,7 +426,7 @@ void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool 
     }
 
     bool baby = is_baby(p), force = is_force_user(p);
-    SDL_Texture *stack[4];
+    SDL_Texture *stack[5];
     int layers = 4;
     if (force) {
         const ForceTextures *f = &force_tex[p->force_user];
@@ -415,6 +442,7 @@ void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool 
         stack[1] = t->legs[step_frame(p)];
         stack[2] = t->left_arm[left];
         stack[3] = t->arm[right];
+        if (p->effect == BONUS_ZIGZAG && !p->headless) stack[layers++] = crossed_eyes;
     }
     SDL_Rect dst = sprite_rect(p, faces_right);
     int feet_x, ground;
@@ -428,10 +456,14 @@ void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool 
         if (chained) draw_ball_and_chain(renderer, p, faces_right, ground);
     }
     for (int i = 0; i < layers; i++) {
-        if (depth > 0.0f) SDL_SetTextureColorMod(stack[i], 200, 140, 255);
-        else if (flash) SDL_SetTextureColorMod(stack[i], 90, 130, 255);
-        else SDL_SetTextureColorMod(stack[i], 255, 255, 255);
+        tint(stack[i], depth, flash);
         SDL_RenderCopyEx(renderer, stack[i], NULL, &dst, 0.0, NULL, faces_right ? SDL_FLIP_NONE : SDL_FLIP_HORIZONTAL);
+    }
+    if (is_hatted(p) && !p->headless) {        // On the head, filling the paddle above it
+        SDL_Texture *hat = hats[player_is_female(look)];
+        SDL_Rect at = { dst.x, dst.y - (HAT_H - HAT_OVERLAP) * SPRITE_SCALE, SPRITE_W * SPRITE_SCALE, HAT_H * SPRITE_SCALE };
+        tint(hat, depth, flash);
+        SDL_RenderCopyEx(renderer, hat, NULL, &at, 0.0, NULL, faces_right ? SDL_FLIP_NONE : SDL_FLIP_HORIZONTAL);
     }
     if (chained) draw_cuff(renderer, p, faces_right);
     if (depth > 0.0f) SDL_RenderSetClipRect(renderer, NULL);

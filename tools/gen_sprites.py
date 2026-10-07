@@ -544,6 +544,54 @@ def baby_layers(p):
                 left=[baby_left_arm(f) for f in range(LEFT_FRAMES)],
                 arm=[baby_racket_arm(p, f) for f in range(ARM_FRAMES)])
 
+# --- Hats: worn with the grow bonus, filling the top half of the double-height paddle ----------------------
+# HAT_H rows on the player's 32-wide canvas, drawn above the head at the same scale; the bottom HAT_OVERLAP rows
+# sit over the top of the head. A tall top hat for the men, a towering Ascot hat for the ladies.
+
+HAT_H, HAT_OVERLAP = 96, 16
+HAT_BRIM = HAT_H - 6                    # Brim row: head row 10, on the hair above the brows
+
+def top_hat():
+    L = Layer(HAT_H)
+    L.rect(5, 4, 20, HAT_BRIM - 1, 'crown', 'black', -0.2)              # Crown, a touch wider at the top
+    L.rect(4, 4, 21, 8, 'crown', 'black', 0.0)
+    L.rect(5, HAT_BRIM - 9, 20, HAT_BRIM - 4, 'band', 'red', 0.2)       # Band
+    L.rect(0, HAT_BRIM, 25, HAT_BRIM + 2, 'brim', 'black', 0.1)
+    return L.render()
+
+def lady_hat():
+    L = Layer(HAT_H)
+    # Plumes of feathers sweeping up from the crown, painted first so the flowers sit in front
+    for (x0, x1, lean, mat) in ((9, 3, -0.9, 'white'), (13, 13, 0.0, 'pink'), (17, 25, 0.9, 'white')):
+        for y in range(4, HAT_BRIM - 12):
+            t = (HAT_BRIM - 12 - y) / (HAT_BRIM - 16)               # 0 at the crown, 1 at the tip
+            cx = x0 + (x1 - x0) * t + lean * 4 * math.sin(t * math.pi) + 0.8 * math.sin(y * 0.7)
+            half = 0.8 + 2.4 * t * (1.2 - t) * 2                    # Thin quill, fluffy towards the tip
+            for x in range(int(cx - half), int(cx + half) + 1):
+                L.paint(x, y, f'plume{x0}', mat, 0.3 * math.sin(y * 0.8))
+    L.rect(5, HAT_BRIM - 12, 20, HAT_BRIM - 1, 'crown', 'pink', 0.0)      # Crown
+    L.rect(5, HAT_BRIM - 5, 20, HAT_BRIM - 3, 'ribbon', 'lime', 0.2)
+    for cx, cy, mat in ((7, HAT_BRIM - 11, 'red'), (12, HAT_BRIM - 13, 'white'), (18, HAT_BRIM - 11, 'red')):
+        for y in range(cy - 2, cy + 3):                                 # Flowers on the crown
+            for x in range(cx - 2, cx + 3):
+                if (x - cx) ** 2 + (y - cy) ** 2 <= 5:
+                    L.paint(x, y, f'flower{cx}', mat, 0.4)
+        L.pixel(cx, cy, 'Q')
+    L.rect(0, HAT_BRIM, 27, HAT_BRIM + 2, 'brim', 'pink', 0.1)            # Wide brim
+    return L.render()
+
+# --- Crossed eyes: overlay drawn on the face while a player has the zig-zag bonus ------------------------
+# Only the eyes: bulging whites with the pupils in the inner corners. Every player shares the eye layout; no baby
+# version, as a shrunk player can't have the zig-zag bonus at the same time.
+
+def crossed_eyes():
+    L = Layer()
+    for x0, rows in ((5, ("eEEEe", "EEEkk", "eEEkk")), (16, ("eEEEe", "kkEEE", "kkEEe"))):
+        for dy, row in enumerate(rows):
+            for i, c in enumerate(row):
+                L.pixel(x0 + i, 22 + dy, c)
+    return L.render()
+
 # --- Force users: Vader or Luke stands in for a player with the full-height bonus ------------------------
 # Same 32x80 canvas and Pop! head; they don't walk, so it's a body (legs, cape and the back arm holding a lit
 # lightsaber included), a headless body for fatalities, and the front arm idle or in the force push.
@@ -734,6 +782,15 @@ def emit_inc(path, built, force):
         out += [c_array("baby " + n, f, "    ") for n, f in zip(arm_names, b['arm'])]
         out.append("};")
         out.append("")
+    out.append(f"#define HAT_H {HAT_H}")
+    out.append(f"#define HAT_OVERLAP {HAT_OVERLAP}")
+    out.append("static const char *const TOP_HAT[HAT_H] =")
+    out.append(c_array("top hat (grow, men)", top_hat())[:-1] + ";")
+    out.append("static const char *const LADY_HAT[HAT_H] =")
+    out.append(c_array("Ascot hat (grow, ladies)", lady_hat())[:-1] + ";")
+    out.append("static const char *const CROSSED_EYES[SPRITE_H] =")
+    out.append(c_array("crossed eyes (zig-zag)", crossed_eyes())[:-1] + ";")
+    out.append("")
     for name, l in force.items():
         out.append(f"static const char *const {name}_FORCE_BODY[SPRITE_H] =")
         out.append(c_array("force user body", l['body'])[:-1] + ";")
@@ -774,6 +831,19 @@ def previews(built, force):
 
     for name in built:
         compose(stack(name)).save(f"assets/{name.lower()}.png")
+    lineup([stack(name) + [crossed_eyes()] for name in built]).save("assets/crossed_eyes.png")
+
+    # Each player with their hat, the way it sits in game: body layers padded on top, the hat at the bottom
+    def hatted(name, mirror):
+        hat = top_hat() if name in ('AGASSI', 'NADAL') else lady_hat()
+        above, below = HAT_H - HAT_OVERLAP, H - HAT_OVERLAP
+        layers = [['.' * W] * above + rows for rows in stack(name)] + [hat + ['.' * W] * below]
+        return compose(layers, mirror, above + H)
+    imgs = [hatted(name, i % 2 == 1) for i, name in enumerate(built)]
+    sheet = Image.new('RGB', ((imgs[0].width + pad) * len(imgs) + pad, imgs[0].height + pad * 2), bg)
+    for i, im in enumerate(imgs):
+        sheet.paste(im, (pad + i * (im.width + pad), pad))
+    sheet.save("assets/hats.png")
     lineup([stack(name) for name in built]).save("assets/players.png")
 
     # Sheet: step cycle, swing, the hadouken charge and thrust, then the fatality (unarmed throw, headless)
@@ -834,5 +904,5 @@ if __name__ == "__main__":
     force = {name: force_layers(name, f) for name, f in FORCE_USERS.items()}
     emit_inc("player_sprites.inc", built, force)
     previews(built, force)
-    print("wrote player_sprites.inc and assets/{agassi,nadal,players,agassi_frames,babies,force}.png, "
+    print("wrote player_sprites.inc and assets/{agassi,nadal,players,agassi_frames,babies,force,crossed_eyes,hats}.png, "
           "assets/players.gif")
