@@ -3,7 +3,8 @@
 
 Each player is drawn as four 32x80 layers stacked in the game: a body (big Pop!-figure head, torso,
 shorts), one of 4 leg frames (step cycle), a left arm (hanging, or the hadouken charge and thrust) and
-a racket arm (4 swing poses plus the hadouken charge and thrust).
+a racket arm (4 swing poses plus the hadouken charge and thrust). Each also has a baby version, the same
+layers and poses on a 32x40 canvas, drawn while the player is shrunk.
 
 Style: shaded pixel art. Shapes are painted as regions of a material (skin, blond hair, denim...);
 a lighting pass picks one of each material's 4 tones (light from the upper left: the head is lit as
@@ -66,14 +67,15 @@ BAYER = [[0.0, 0.5], [0.75, 0.25]]
 # --- Layer: regions of materials, then shading and outline -------------------------------------------
 
 class Layer:
-    def __init__(self):
-        self.region = [[None] * W for _ in range(H)]
-        self.mat = [[None] * W for _ in range(H)]
-        self.bias = [[0.0] * W for _ in range(H)]
-        self.over = [[None] * W for _ in range(H)]     # Hand-placed pixels drawn after shading
+    def __init__(self, h=H):
+        self.h = h                                      # H for the players, BABY_H for the babies
+        self.region = [[None] * W for _ in range(h)]
+        self.mat = [[None] * W for _ in range(h)]
+        self.bias = [[0.0] * W for _ in range(h)]
+        self.over = [[None] * W for _ in range(h)]     # Hand-placed pixels drawn after shading
 
     def paint(self, x, y, region, mat, bias=0.0):
-        if 0 <= x < W and 0 <= y < H:
+        if 0 <= x < W and 0 <= y < self.h:
             self.region[y][x], self.mat[y][x], self.bias[y][x] = region, mat, bias
 
     def rect(self, x0, y0, x1, y1, region, mat, bias=0.0):
@@ -82,16 +84,16 @@ class Layer:
                 self.paint(x, y, region, mat, bias)
 
     def pixel(self, x, y, c):
-        if 0 <= x < W and 0 <= y < H:
+        if 0 <= x < W and 0 <= y < self.h:
             self.over[y][x] = c
 
     def inside(self, x, y, region):
-        return 0 <= x < W and 0 <= y < H and self.region[y][x] == region
+        return 0 <= x < W and 0 <= y < self.h and self.region[y][x] == region
 
     def render(self, sphere=None):
         """Pick a tone per pixel, add outlines, apply hand-placed pixels. Returns rows of chars."""
-        out = [['.'] * W for _ in range(H)]
-        for y in range(H):
+        out = [['.'] * W for _ in range(self.h)]
+        for y in range(self.h):
             for x in range(W):
                 r, m = self.region[y][x], self.mat[y][x]
                 if r is None:
@@ -115,16 +117,16 @@ class Layer:
                 tones = MATERIALS[m][1]
                 out[y][x] = tones[max(0, min(3, int(round(1.5 + light * 1.6))))]
         # Selective outline: empty pixels next to a region take the neighbour material's darkest colour
-        for y in range(H):
+        for y in range(self.h):
             for x in range(W):
                 if self.region[y][x] is not None:
                     continue
                 for dx, dy in ((0, -1), (-1, 0), (1, 0), (0, 1)):
                     nx, ny = x + dx, y + dy
-                    if 0 <= nx < W and 0 <= ny < H and self.mat[ny][nx] and MATERIALS[self.mat[ny][nx]][0]:
+                    if 0 <= nx < W and 0 <= ny < self.h and self.mat[ny][nx] and MATERIALS[self.mat[ny][nx]][0]:
                         out[y][x] = MATERIALS[self.mat[ny][nx]][0]
                         break
-        for y in range(H):
+        for y in range(self.h):
             for x in range(W):
                 if self.over[y][x]:
                     out[y][x] = self.over[y][x]
@@ -315,22 +317,23 @@ def left_arm(frame):
     L.rect(hand[0] - 1, hand[1] - 1, hand[0], hand[1], 'arm', 'skin', 0.2)
     return L.render()
 
-def paint_racket(L, hand, angle, mat, grip=False):
+def paint_racket(L, hand, angle, mat, grip=False, size=1.0):
+    """Racket from the hand at `angle`; `size` scales it (a baby's is smaller)."""
     a = math.radians(angle)
     ux, uy = math.sin(a), -math.cos(a)          # Along the racket
     vx, vy = -uy, ux                            # Across
     hx, hy = hand
-    for i in range(1, 4):                       # Throat
+    for i in range(1, 1 + round(3 * size)):     # Throat
         L.paint(int(round(hx + ux * i)), int(round(hy + uy * i)), 'racket', mat)
     if grip:                                    # Only seen when no hand covers it
         for i in range(-3, 1):
             L.paint(int(round(hx + ux * i)), int(round(hy + uy * i)), 'grip', 'black')
-    cx, cy = hx + ux * 7.5, hy + uy * 7.5       # Head center
-    for y in range(H):
+    cx, cy = hx + ux * 7.5 * size, hy + uy * 7.5 * size    # Head center
+    for y in range(L.h):
         for x in range(W):
             dx, dy = x - cx, y - cy
             along, across = dx * ux + dy * uy, dx * vx + dy * vy
-            d = (along / 4.6) ** 2 + (across / 3.2) ** 2
+            d = (along / (4.6 * size)) ** 2 + (across / (3.2 * size)) ** 2
             if d <= 1.0:
                 if d < 0.45:
                     L.paint(x, y, 'strings', 'string', 0.6 if (x + y) % 2 else -0.6)   # String bed
@@ -347,13 +350,147 @@ def racket_arm(p, frame):
     L.rect(hand[0] - 1, hand[1] - 1, hand[0], hand[1], 'arm', 'skin', 0.2)             # Fist over the grip
     if frame == CHARGE:                         # Glowing orb cupped between the hands, in front of everything
         ox, oy, r = ORB
-        for y in range(H):
+        for y in range(L.h):
             for x in range(W):
                 d = math.hypot(x - ox, y - oy)
                 if d <= r:
                     L.paint(x, y, 'orb', 'energy', 0.8 - d / r)
         L.pixel(ox, oy, 'V')
     return L.render()
+
+# --- Babies: the players while shrunk ------------------------------------------------------------------
+# Same layers and poses on a 32x40 canvas, drawn at the shrunk paddle height with square pixels: a big round
+# head with a tuft of the player's hair, big eyes and a pacifier, a onesie in the shirt's colours, a diaper,
+# chubby limbs, booties and a small racket. Feature points (players.c BABY_POINTS) follow this layout.
+
+BABY_H = 40
+BABY_HEAD = (12.5, 10.0, 9.5, 9.0)      # Ellipse: center x, y, radii
+BABY_TORSO = (19, 28)                   # Onesie rows; the diaper follows down to BABY_DIAPER_BOTTOM
+BABY_DIAPER_BOTTOM = 33
+BABY_SHOULDER = (18, 20)
+BABY_SWING = [  # As SWING, shorter arms
+    ((20, 24), (21, 26), 15),       # Ready
+    ((21, 22), (22, 20), 50),       # Forward
+    ((21, 21), (21, 20), 85),       # Contact
+    ((20, 24), (20, 27), 135),      # Follow-through
+    ((15, 24), (11, 26), 160),      # Hadouken charge
+    ((21, 20), (25, 20), 0),        # Hadouken thrust
+]
+BABY_LEFT_SHOULDER = (8, 20)
+BABY_LEFT_POSES = [None, ((5, 24), (6, 27)), ((15, 22), (24, 22))]
+BABY_ORB = (8, 26, 2.3)
+BABY_RACKET = 0.65
+
+def baby_hair(L, p):
+    """Agassi: a blond curl on a nearly bald head. Nadal: a brown mop with his red headband."""
+    cx, cy, rx, ry = BABY_HEAD
+    cap = 3 if p['hair'] == 'blond' else 6
+    for y in range(BABY_H):
+        for x in range(W):
+            if L.region[y][x] != 'face':
+                continue
+            side = p['hair'] != 'blond' and y < 10 and (x < 5 or x > 20)
+            if y < cap or side:
+                L.paint(x, y, 'hair', p['hair'], 0.3 * math.sin(x * 1.9))
+    if p['hair'] == 'blond':                    # The curl sticking up
+        for x, y in ((12, 0), (13, 0), (14, 0), (14, 1)):
+            L.paint(x, y, 'hair', 'blond', 0.4)
+    if p['headband']:
+        for y in (5, 6):
+            for x in range(W):
+                if L.region[y][x] in ('hair', 'face'):
+                    L.paint(x, y, 'band', 'red')
+
+def baby_face(L, p):
+    brow = 'h' if p['hair'] != 'blond' else 'z'
+    for x in (7, 8, 15, 16):
+        L.pixel(x, 8, brow)
+    for x0 in (7, 15):                          # Big eyes with a highlight
+        for y in (10, 11, 12):
+            L.pixel(x0, y, 'k')
+            L.pixel(x0 + 1, y, 'E' if y == 10 else 'k')
+    for x in (5, 6, 17, 18):                    # Rosy cheeks
+        L.pixel(x, 13, 'l')
+    L.pixel(12, 13, 'a'); L.pixel(13, 13, 's')  # Button nose
+    tones = MATERIALS[p['shoe_accent']][1]      # Pacifier in the player's accent colour
+    for x in range(10, 16):
+        L.pixel(x, 15, tones[2])
+    L.pixel(12, 16, tones[1]); L.pixel(13, 16, tones[1])
+    L.pixel(12, 17, tones[3]); L.pixel(13, 17, tones[3])
+
+def baby_body(p, headless=False):
+    L = Layer(BABY_H)
+    top, bottom = BABY_TORSO
+    for y in range(top, bottom + 1):            # Chubby onesie, the belly bulging
+        bulge = 1 if 22 <= y <= 27 else 0
+        for x in range(7 - bulge, 19 + bulge):
+            L.paint(x, y, 'torso', p['shirt'](x, y), (12.5 - x) / 10 - (0.6 if y < top + 2 else 0))
+    for y in range(bottom + 1, BABY_DIAPER_BOTTOM + 1):
+        for x in range(7, 19):
+            if y == BABY_DIAPER_BOTTOM and x in (12, 13):
+                continue
+            L.paint(x, y, 'diaper', 'white', (12.5 - x) / 14)
+    if headless:
+        L.rect(10, 17, 15, 18, 'stump', 'blood', 0.4)
+        for x, depth in ((8, 2), (9, 4), (10, 1), (11, 5), (12, 3), (13, 6), (14, 2), (15, 3), (16, 1)):
+            L.rect(x, top, x, top + depth, 'gore', 'blood', -0.2)
+        return L.render()
+    cx, cy, rx, ry = BABY_HEAD
+    for y in range(BABY_H):
+        for x in range(W):
+            nx, ny = (x + 0.5 - cx) / rx, (y + 0.5 - cy) / ry
+            if nx * nx + ny * ny <= 1:
+                L.paint(x, y, 'face', 'skin')
+    baby_hair(L, p)
+    baby_face(L, p)
+    return L.render(dict(regions={'face', 'hair', 'band'}, ellipse=BABY_HEAD))
+
+def baby_legs(p, frame):
+    L = Layer(BABY_H)
+    lift = {1: (1, 0), 3: (0, 1)}.get(frame, (0, 0))
+    for side, (x0, up) in enumerate(((8, lift[0]), (14, lift[1]))):
+        foot_y = 37 - up
+        L.rect(x0, BABY_DIAPER_BOTTOM + 1, x0 + 2, foot_y - 1, f'leg{side}', 'skin', -0.1)
+        L.rect(x0, foot_y, x0 + 3, foot_y + 1, f'shoe{side}', 'white', 0.2)               # Booties
+        L.pixel(x0 + 1, foot_y + 1, MATERIALS[p['shoe_accent']][1][2])
+    return L.render()
+
+def baby_left_arm(frame):
+    L = Layer(BABY_H)
+    pose = BABY_LEFT_POSES[frame]
+    if pose is None:
+        L.rect(5, 20, 6, 25, 'arm', 'skin', -0.1)
+        L.rect(4, 25, 6, 27, 'arm', 'skin', -0.1)
+        return L.render()
+    elbow, hand = pose
+    limb(L, BABY_LEFT_SHOULDER, elbow, 'arm', 'skin')
+    limb(L, elbow, hand, 'arm', 'skin')
+    L.rect(hand[0] - 1, hand[1] - 1, hand[0], hand[1], 'arm', 'skin', 0.2)
+    return L.render()
+
+def baby_racket_arm(p, frame):
+    elbow, hand, angle = BABY_SWING[THRUST if frame == UNARMED else frame]
+    L = Layer(BABY_H)
+    if frame != UNARMED:
+        paint_racket(L, hand, angle, p['racket'], size=BABY_RACKET)
+    limb(L, BABY_SHOULDER, elbow, 'arm', 'skin')
+    limb(L, elbow, hand, 'arm', 'skin')
+    L.rect(hand[0] - 1, hand[1] - 1, hand[0], hand[1], 'arm', 'skin', 0.2)
+    if frame == CHARGE:
+        ox, oy, r = BABY_ORB
+        for y in range(BABY_H):
+            for x in range(W):
+                d = math.hypot(x - ox, y - oy)
+                if d <= r:
+                    L.paint(x, y, 'orb', 'energy', 0.8 - d / r)
+        L.pixel(ox, oy, 'V')
+    return L.render()
+
+def baby_layers(p):
+    return dict(body=baby_body(p), headless=baby_body(p, headless=True),
+                legs=[baby_legs(p, f) for f in range(STEP_FRAMES)],
+                left=[baby_left_arm(f) for f in range(LEFT_FRAMES)],
+                arm=[baby_racket_arm(p, f) for f in range(ARM_FRAMES)])
 
 # --- Players ---------------------------------------------------------------------------------------------
 
@@ -380,7 +517,7 @@ def racket(p):
 def layers(p):
     return dict(body=body(p), headless=body(p, headless=True), legs=[legs(p, f) for f in range(STEP_FRAMES)],
                 left=[left_arm(f) for f in range(LEFT_FRAMES)], arm=[racket_arm(p, f) for f in range(ARM_FRAMES)],
-                racket=racket(p))
+                racket=racket(p), baby=baby_layers(p))
 
 # --- Output ----------------------------------------------------------------------------------------------
 
@@ -415,6 +552,20 @@ def emit_inc(path, built):
         out.append("};")
         out.append(f"static const char *const {name}_RACKET[RACKET_H] =")
         out.append(c_array("thrown racket", l['racket'])[:-1] + ";")
+        b = l['baby']
+        out.append(f"static const char *const {name}_BABY_BODY[BABY_H] =")
+        out.append(c_array("baby body", b['body'])[:-1] + ";")
+        out.append(f"static const char *const {name}_BABY_HEADLESS[BABY_H] =")
+        out.append(c_array("headless baby body", b['headless'])[:-1] + ";")
+        out.append(f"static const char *const {name}_BABY_LEGS[STEP_POSES][BABY_H] = {{")
+        out += [c_array(f"baby step {i}", f, "    ") for i, f in enumerate(b['legs'])]
+        out.append("};")
+        out.append(f"static const char *const {name}_BABY_LEFT_ARM[LEFT_ARM_POSES][BABY_H] = {{")
+        out += [c_array("baby " + n, f, "    ") for n, f in zip(["hanging", "charge", "thrust"], b['left'])]
+        out.append("};")
+        out.append(f"static const char *const {name}_BABY_ARM[ARM_POSES][BABY_H] = {{")
+        out += [c_array("baby " + n, f, "    ") for n, f in zip(arm_names, b['arm'])]
+        out.append("};")
         out.append("")
     open(path, "w").write("\n".join(out))
 
@@ -422,8 +573,8 @@ def previews(built):
     from PIL import Image
     bg, scale, pad = (14, 14, 18), 8, 40
 
-    def compose(stack, mirror=False):
-        img = Image.new('RGB', (W, H), bg)
+    def compose(stack, mirror=False, h=H):
+        img = Image.new('RGB', (W, h), bg)
         for rows in stack:
             for y, row in enumerate(rows):
                 for x, c in enumerate(row):
@@ -431,7 +582,7 @@ def previews(built):
                         img.putpixel((x, y), COLORS[c])
         if mirror:
             img = img.transpose(Image.FLIP_LEFT_RIGHT)
-        return img.resize((W * scale, H * scale), Image.NEAREST)
+        return img.resize((W * scale, h * scale), Image.NEAREST)
 
     def pair(a_stack, n_stack):
         a, n = compose(a_stack), compose(n_stack, mirror=True)
@@ -469,6 +620,22 @@ def previews(built):
     frames += [both(left=1, arm=CHARGE)] * 5 + [both(left=2, arm=THRUST)] * 5 + [both()] * 3
     frames[0].save("assets/players.gif", save_all=True, append_images=frames[1:], duration=90, loop=0)
 
+    # Babies: both standing, swinging, charging and throwing, then headless
+    def baby(pl, step=0, left=0, arm=0, headless=False, mirror=False):
+        b = built[pl]['baby']
+        return compose([b['headless' if headless else 'body'], b['legs'][step], b['left'][left], b['arm'][arm]],
+                       mirror, BABY_H)
+    cells = [baby('AGASSI'), baby('AGASSI', step=1, arm=2), baby('AGASSI', left=1, arm=CHARGE),
+             baby('AGASSI', left=2, arm=THRUST), baby('AGASSI', headless=True),
+             baby('NADAL', mirror=True), baby('NADAL', step=3, arm=3, mirror=True),
+             baby('NADAL', left=1, arm=CHARGE, mirror=True), baby('NADAL', left=2, arm=THRUST, mirror=True),
+             baby('NADAL', headless=True, mirror=True)]
+    cw, ch = cells[0].width + pad, cells[0].height + pad
+    sheet = Image.new('RGB', (cw * 5 + pad, ch * 2 + pad), bg)
+    for i, im in enumerate(cells):
+        sheet.paste(im, (pad + (i % 5) * cw, pad + (i // 5) * ch))
+    sheet.save("assets/babies.png")
+
 if __name__ == "__main__":
     assert len(HEAD_MASK) == 44 and all(len(r) == 12 for r in HEAD_MASK)
     assert len(set(COLORS)) == len(COLORS) and not set(COLORS) & set('."\\')
@@ -477,4 +644,4 @@ if __name__ == "__main__":
     built = {name: layers(p) for name, p in PLAYERS.items()}
     emit_inc("player_sprites.inc", built)
     previews(built)
-    print("wrote player_sprites.inc and assets/{agassi,nadal,players,agassi_frames}.png, assets/players.gif")
+    print("wrote player_sprites.inc and assets/{agassi,nadal,players,agassi_frames,babies}.png, assets/players.gif")

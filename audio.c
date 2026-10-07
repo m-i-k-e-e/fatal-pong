@@ -1,4 +1,5 @@
 #include "audio.h"
+#include "game.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +20,10 @@ EMBED_WAV(agassi_wins_wav, "agassi-wins.wav");
 EMBED_WAV(nadal_wins_wav, "nadal-wins.wav");
 EMBED_WAV(finish_him_wav, "finish-him.wav");
 EMBED_WAV(fatality_wav, "fatality.wav");
+EMBED_WAV(boomerang_wav, "cartoon-boomerang.wav");
+EMBED_WAV(scream_wav, "fatality-scream.wav");
+EMBED_WAV(grunt_wav, "grunt.wav");
+EMBED_WAV(kasplat_grunt_wav, "kasplat-grunt.wav");
 #define AUDIO_RATE          48000
 #define MAX_VOICES          4
 
@@ -36,6 +41,9 @@ Sound snd_agassi_wins;
 Sound snd_nadal_wins;
 Sound snd_finish_him;
 Sound snd_fatality;
+Sound snd_boomerang;
+Sound snd_scream;
+Sound snd_grunts[GRUNT_COUNT];
 Sound snd_splat;
 Sound snd_rift;
 Sound snd_rift_snap;
@@ -115,7 +123,7 @@ static void synth_hadouken(void) {
             phase += pitch / AUDIO_RATE;
             if (phase >= 1.0f) phase -= 1.0f;
             glottal += 0.25f * ((1.0f - 2.0f * phase) - glottal);
-            float src = glottal * voice + ((rand() / (float)RAND_MAX) * 2.0f - 1.0f) * noise * 0.5f;
+            float src = glottal * voice + (rand01() * 2.0f - 1.0f) * noise * 0.5f;
 
             out = resonate(&r1, src, f1, 90.0f) * 1.0f +
                   resonate(&r2, src, f2, 110.0f) * 0.6f +
@@ -126,7 +134,7 @@ static void synth_hadouken(void) {
         if (t >= whoosh_start) {
             float w = (t - whoosh_start) / whoosh_len;
             float env = w < 0.1f ? w / 0.1f : (1.0f - w) / 0.9f;
-            float n = (rand() / (float)RAND_MAX) * 2.0f - 1.0f;
+            float n = rand01() * 2.0f - 1.0f;
             out += resonate(&rw, n, 1800.0f - 1400.0f * w, 400.0f) * env * 0.35f;
         }
 
@@ -154,7 +162,7 @@ static void synth_splat(void) {
         float t = (float)i / AUDIO_RATE;
         phase += (35.0f + 45.0f * expf(-t * 12.0f)) / AUDIO_RATE;
         float thump = sinf(2.0f * (float)M_PI * phase) * expf(-t * 9.0f);
-        float n = (rand() / (float)RAND_MAX) * 2.0f - 1.0f;
+        float n = rand01() * 2.0f - 1.0f;
         low += 0.12f * (n - low);                                   // One-pole low-pass: wet, not hissy
         float bubbles = 0.6f + 0.4f * sinf(2.0f * (float)M_PI * 23.0f * t + 3.0f * sinf(t * 31.0f));
         float squelch = low * 3.5f * bubbles * expf(-t * 5.0f);
@@ -194,7 +202,7 @@ static void synth_rift_snap(void) {
         float t = (float)i / AUDIO_RATE;
         phase += (40.0f + 500.0f * expf(-t * 9.0f)) / AUDIO_RATE;
         float sweep = sinf(2.0f * (float)M_PI * phase) * expf(-t * 5.0f);
-        float n = (rand() / (float)RAND_MAX) * 2.0f - 1.0f;
+        float n = rand01() * 2.0f - 1.0f;
         low += 0.3f * (n - low);
         float out = 0.8f * sweep + 0.7f * low * expf(-t * 10.0f);
         pcm[i] = (Sint16)(SDL_clamp(out, -1.0f, 1.0f) * 0.85f * 32767.0f);
@@ -212,7 +220,7 @@ static void synth_mole(void) {
     for (int i = 0; i < samples; i++) {
         float t = (float)i / AUDIO_RATE;
         phase += (42.0f + 6.0f * sinf(2.0f * (float)M_PI * 3.0f * t)) / AUDIO_RATE;
-        float n = (rand() / (float)RAND_MAX) * 2.0f - 1.0f;
+        float n = rand01() * 2.0f - 1.0f;
         low += 0.04f * (n - low);                                   // Rumble
         grit += 0.5f * (n - grit);                                  // Scratching
         float scratch = fmodf(t * 7.0f, 1.0f) < 0.35f ? grit * 0.35f : 0.0f;
@@ -233,7 +241,7 @@ static void synth_thud(void) {
     for (int i = 0; i < samples; i++) {
         float t = (float)i / AUDIO_RATE;
         phase += (70.0f + 120.0f * expf(-t * 30.0f)) / AUDIO_RATE;
-        float n = (rand() / (float)RAND_MAX) * 2.0f - 1.0f;
+        float n = rand01() * 2.0f - 1.0f;
         low += 0.2f * (n - low);
         float out = sinf(2.0f * (float)M_PI * phase) * expf(-t * 18.0f) + 0.8f * low * expf(-t * 25.0f);
         pcm[i] = (Sint16)(SDL_clamp(out, -1.0f, 1.0f) * 0.9f * 32767.0f);
@@ -242,25 +250,35 @@ static void synth_thud(void) {
     snd_thud.count = samples;
 }
 
-// Tremor: a deep rolling rumble with the ground snapping (sparse sharp crackles) as it splits
+// Tremor: a deep rolling rumble with the ground snapping (sparse low crunches) as it splits. Mixed in float,
+// then normalized and faded to silence so it neither clips nor clicks off at the end.
 static void synth_quake(void) {
     int samples = (int)(1.1f * AUDIO_RATE);
+    float *mix = SDL_malloc(samples * sizeof(float));
     Sint16 *pcm = SDL_malloc(samples * sizeof(Sint16));
-    if (!pcm) return;
-    float phase = 0.0f, low = 0.0f, low2 = 0.0f, crackle = 0.0f;
+    if (!mix || !pcm) { SDL_free(mix); SDL_free(pcm); return; }
+    float phase = 0.0f, phase2 = 0.0f, low = 0.0f, low2 = 0.0f, crackle = 0.0f, crunch = 0.0f, peak = 0.0f;
     for (int i = 0; i < samples; i++) {
         float t = (float)i / AUDIO_RATE;
-        phase += (28.0f + 8.0f * sinf(2.0f * (float)M_PI * 1.7f * t)) / AUDIO_RATE;
-        float n = (rand() / (float)RAND_MAX) * 2.0f - 1.0f;
+        float wobble = sinf(2.0f * (float)M_PI * 1.7f * t);
+        phase += (32.0f + 8.0f * wobble) / AUDIO_RATE;
+        phase2 += (58.0f + 10.0f * wobble) / AUDIO_RATE;            // Audible on small speakers too
+        float n = rand01() * 2.0f - 1.0f;
         low += 0.03f * (n - low);
         low2 += 0.03f * (low - low2);                               // Two poles: a deep roll
-        if (t > 0.05f && t < 0.6f && rand() % 1400 == 0) crackle = 1.0f;
-        crackle *= 0.993f;
-        float snap = crackle * ((rand() / (float)RAND_MAX) * 2.0f - 1.0f);
+        if (t > 0.05f && t < 0.6f && rand() % 2400 == 0) crackle = 1.0f;
+        crackle *= 0.9985f;
+        float snap = crackle * (rand01() * 2.0f - 1.0f);
+        crunch += 0.12f * (snap - crunch);                          // Low-passed: a crunch, not a click
         float env = SDL_min(t / 0.04f, 1.0f) * expf(-t * 2.2f);
-        float out = (0.55f * sinf(2.0f * (float)M_PI * phase) + 9.0f * low2) * env + 0.5f * snap;
-        pcm[i] = (Sint16)(SDL_clamp(out, -1.0f, 1.0f) * 0.9f * 32767.0f);
+        float tail = SDL_min((1.1f - t) / 0.3f, 1.0f);             // Fade the last 0.3 s to silence
+        mix[i] = ((0.5f * sinf(2.0f * (float)M_PI * phase) + 0.35f * sinf(2.0f * (float)M_PI * phase2)
+                   + 6.0f * low2) * env + 1.5f * crunch) * tail;
+        peak = SDL_max(peak, fabsf(mix[i]));
     }
+    float gain = peak > 0.0f ? 0.8f / peak : 0.0f;
+    for (int i = 0; i < samples; i++) pcm[i] = (Sint16)(mix[i] * gain * 32767.0f);
+    SDL_free(mix);
     snd_quake.samples = pcm;
     snd_quake.count = samples;
 }
@@ -296,7 +314,7 @@ static void synth_tongue(void) {
     for (int i = 0; i < samples; i++) {
         float t = (float)i / AUDIO_RATE, k = t / 0.12f;
         phase += (300.0f + 1500.0f * k * k) / AUDIO_RATE;
-        float n = (rand() / (float)RAND_MAX) * 2.0f - 1.0f;
+        float n = rand01() * 2.0f - 1.0f;
         float env = SDL_min(t / 0.005f, 1.0f) * (1.0f - k);
         float out = (0.8f * sinf(2.0f * (float)M_PI * phase) + 0.25f * n) * env;
         pcm[i] = (Sint16)(SDL_clamp(out, -1.0f, 1.0f) * 0.8f * 32767.0f);
@@ -314,7 +332,7 @@ static void synth_spit(void) {
     for (int i = 0; i < samples; i++) {
         float t = (float)i / AUDIO_RATE;
         phase += (220.0f * expf(-t * 25.0f) + 90.0f) / AUDIO_RATE;
-        float n = (rand() / (float)RAND_MAX) * 2.0f - 1.0f;
+        float n = rand01() * 2.0f - 1.0f;
         low += 0.35f * (n - low);
         float pop = sinf(2.0f * (float)M_PI * phase) * expf(-t * 60.0f);
         float puff = low * (t > 0.015f ? expf(-(t - 0.015f) * 22.0f) : 0.0f);
@@ -413,6 +431,12 @@ void init_audio(void) {
     if (!load_wav(finish_him_wav, finish_him_wav_end, &snd_finish_him) ||
         !load_wav(fatality_wav, fatality_wav_end, &snd_fatality))
         printf("[pong] fatality announcer clip unusable (%s)\n", SDL_GetError());
+    if (!load_wav(boomerang_wav, boomerang_wav_end, &snd_boomerang) ||
+        !load_wav(scream_wav, scream_wav_end, &snd_scream))
+        printf("[pong] fatality sound effect unusable (%s)\n", SDL_GetError());
+    if (!load_wav(grunt_wav, grunt_wav_end, &snd_grunts[0]) ||
+        !load_wav(kasplat_grunt_wav, kasplat_grunt_wav_end, &snd_grunts[1]))
+        printf("[pong] grunt clip unusable (%s)\n", SDL_GetError());
     synth_splat();
     synth_rift();
     synth_rift_snap();
@@ -451,6 +475,9 @@ void shutdown_audio(void) {
     SDL_free(snd_nadal_wins.samples);
     SDL_free(snd_finish_him.samples);
     SDL_free(snd_fatality.samples);
+    SDL_free(snd_boomerang.samples);
+    SDL_free(snd_scream.samples);
+    for (int i = 0; i < GRUNT_COUNT; i++) SDL_free(snd_grunts[i].samples);
     SDL_free(snd_splat.samples);
     SDL_free(snd_rift.samples);
     SDL_free(snd_rift_snap.samples);

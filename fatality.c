@@ -45,7 +45,7 @@ static int impact_frame = -1;           // Frame the head exploded, -1 before
 
 // Random float in [lo, hi]
 static float frand(float lo, float hi) {
-    return lo + (hi - lo) * (rand() / (float)RAND_MAX);
+    return lo + (hi - lo) * rand01();
 }
 
 // Start a blood drop or chunk in a free slot (dropped when all BLOOD_MAX are in flight); `stains_` makes it
@@ -88,14 +88,15 @@ void fatality_start(Paddle *winner, PlayerLook winner_look, bool winner_faces_ri
     started = true;
     frame = 0;
     impact_frame = -1;
-    play_sound(&snd_hadouken);              // The throw's whoosh
+    play_sound(&snd_boomerang);             // The racket spinning through the air
 }
 
-// The racket hits: the loser loses their head in a burst of blood and chunks (skin, hair, Nadal's headband)
+// The racket hits: the loser loses their head in a burst of blood and chunks (skin, hair, Nadal's headband); plays the splat and the scream
 static void explode(void) {
     loser->headless = true;
     impact_frame = frame;
     play_sound(&snd_splat);
+    play_sound(&snd_scream);
     for (int i = 0; i < BURST_BLOOD; i++) {
         float a = frand(0, 2 * (float)M_PI), speed = frand(2, 19);
         spawn(target_x + frand(-12, 12), target_y + frand(-14, 14), SDL_cosf(a) * speed, SDL_sinf(a) * speed - 6,

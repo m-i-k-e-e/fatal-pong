@@ -10,7 +10,9 @@
 // now and then (an old one going away when there's no room or at random), with CALAMITY_MIN..CALAMITY_MAX
 // standing until it ends. A ball that runs into one is either knocked off at an angle or bounces off it.
 //   The mole digs molehills and pops out of each new one.
-//   The earthquake shakes the ground every time, and each tremor opens a crack.
+//   The earthquake shakes the ground every time, and each tremor opens a crack. A ball that runs into a crack
+//   drops into it and comes out of another one a moment later, still heading the same way (knocked off when
+//   there's no other crack).
 //   The frog rain drops frogs from the sky: the big ones land and sit in the way (hopping off when replaced),
 //   while smaller ones keep raining down all over the court, land and leap away without blocking anything.
 //   A big frog doesn't knock the ball: it swallows it, either on contact or by catching it with its tongue
@@ -40,6 +42,7 @@
 #define CRACK_CLOSE         24
 #define CRACK_HALF_WIDTH    7.0f        // At the middle; tapers toward the ends
 #define CRACK_REACH         6.0f        // Extra collision margin beyond the fissure
+#define TUNNEL_FRAMES       20          // Frames the ball spends underground between two cracks
 #define TREMOR_FRAMES       30
 #define TREMOR_SHAKE        14          // Pixels at the start of a tremor
 #define ARRIVAL_TREMOR      50          // The first, longer quake under the title
@@ -179,6 +182,8 @@ static SDL_Texture *mole_tex, *frog_tex;
 static Obstacle *holder;                // The frog catching or holding the ball, one at a time
 static Ball *held_ball;
 static int catch_block;
+static Obstacle *tunnel_exit;          // The crack the ball will come out of while it's underground
+static int tunnel_timer;
 static RainFrog rain[RAIN_MAX];
 static int rain_timer;
 static Obstacle obstacles[CALAMITY_MAX];
@@ -190,10 +195,11 @@ static int next_event;
 static int placed;
 static int tremor_timer, tremor_length;
 static int checked_hits;                // paddle_hits already rolled for
+int calamity_chance = CALAMITY_CHANCE_DEFAULT;
 
 // Random float in [lo, hi]
 static float frand(float lo, float hi) {
-    return lo + (hi - lo) * (rand() / (float)RAND_MAX);
+    return lo + (hi - lo) * rand01();
 }
 
 // Texture from mirrored half-width character art
@@ -234,6 +240,7 @@ void reset_calamities(void) {
     if (held_ball) held_ball->held = held_ball->hidden = false;
     holder = NULL;
     held_ball = NULL;
+    tunnel_exit = NULL;
     catch_block = 0;
     active = CALAMITY_NONE;
     title_timer = -1;
@@ -345,11 +352,12 @@ static void place(CalamityType type, const Ball *ball) {
     }
 }
 
-// Send the oldest standing obstacle away (never the frog busy with the ball), to make room
+// Send the oldest standing obstacle away (never the frog busy with the ball or the crack it's tunnelling to),
+// to make room
 static void remove_oldest(void) {
     Obstacle *oldest = NULL;
     for (int i = 0; i < CALAMITY_MAX; i++)
-        if (obstacles[i].state == OB_UP && &obstacles[i] != holder && (!oldest || obstacles[i].age < oldest->age))
+        if (obstacles[i].state == OB_UP && &obstacles[i] != holder && &obstacles[i] != tunnel_exit && (!oldest || obstacles[i].age < oldest->age))
             oldest = &obstacles[i];
     if (!oldest) return;
     oldest->state = OB_FALLING;
@@ -443,7 +451,7 @@ static void swallow(Obstacle *o, Ball *ball) {
 // Out of the mouth in any direction at the speed it came in, clear of the frog, which rests a moment
 static void spit(Obstacle *o) {
     Ball *ball = held_ball;
-    float speed = SDL_max(SDL_sqrtf(ball->vx * ball->vx + ball->vy * ball->vy), (float)INITIAL_BALL_SPEED);
+    float speed = SDL_max(SDL_sqrtf(ball->vx * ball->vx + ball->vy * ball->vy), ball_base_speed());
     float a = frand(0, 2 * (float)M_PI);
     ball->vx = SDL_cosf(a) * speed;
     ball->vy = SDL_sinf(a) * speed;
@@ -513,8 +521,53 @@ static void update_frog(Obstacle *o, Ball *ball) {
     }
 }
 
-// The frog holding the ball lets go when the calamity ends
+// --- Cracks and the ball ---
+
+// The ball drops into crack `o` at (cx, cy): hidden and held underground until emerge() (TUNNEL_FRAMES later)
+// out of another open crack, picked at random. With no other crack open it's knocked off this one instead.
+static void enter_crack(Obstacle *o, Ball *ball, float cx, float cy) {
+    Obstacle *exits[CALAMITY_MAX];
+    int n = 0;
+    for (int i = 0; i < CALAMITY_MAX; i++)
+        if (&obstacles[i] != o && obstacles[i].state == OB_UP && obstacles[i].type == CALAMITY_EARTHQUAKE)
+            exits[n++] = &obstacles[i];
+    float half = ball->size / 2;
+    if (n == 0) {
+        knock(ball, o, ball->x + half - cx, ball->y + half - cy);
+        return;
+    }
+    put_ball(ball, cx, cy);
+    ball->held = ball->hidden = true;
+    held_ball = ball;
+    tunnel_exit = exits[rand() % n];
+    tunnel_timer = TUNNEL_FRAMES;
+    o->cooldown = HIT_COOLDOWN;
+    dirt_burst(cx, cy, 14, 4);
+    play_sound(&snd_thud);
+}
+
+// The ball pops out of the middle of the exit crack, moving as it went in, clear of the fissure
+static void emerge(void) {
+    Ball *ball = held_ball;
+    Obstacle *o = tunnel_exit;
+    float speed = SDL_max(SDL_sqrtf(ball->vx * ball->vx + ball->vy * ball->vy), 0.0001f);
+    float mx = o->crack.x[CRACK_POINTS / 2], my = o->crack.y[CRACK_POINTS / 2];
+    float clear = CRACK_HALF_WIDTH + CRACK_REACH + ball->size / 2 + 4;
+    put_ball(ball, mx + ball->vx / speed * clear, my + ball->vy / speed * clear);
+    ball->held = ball->hidden = false;
+    o->cooldown = HIT_COOLDOWN;
+    tunnel_exit = NULL;
+    held_ball = NULL;
+    dirt_burst(mx, my, 14, 4);
+    play_sound(&snd_thud);
+}
+
+// The frog holding the ball lets go, or the ball comes out of its crack, when the calamity ends
 static void release_ball(void) {
+    if (tunnel_exit) {
+        emerge();
+        return;
+    }
     if (!holder) return;
     if (held_ball) spit(holder);
     else {
@@ -523,8 +576,8 @@ static void release_ball(void) {
     }
 }
 
-// Ball against one standing obstacle: knocks it off a molehill or crack; a big frog swallows it instead
-// unless another frog already has the ball
+// Ball against one standing obstacle: knocks it off a molehill, a crack swallows it (see enter_crack()) and a big
+// frog swallows it unless another frog already has the ball
 static void collide(Obstacle *o, Ball *ball) {
     float half = ball->size / 2, bx = ball->x + half, by = ball->y + half;
     if (ball->held) return;
@@ -539,7 +592,7 @@ static void collide(Obstacle *o, Ball *ball) {
         else knock(ball, o, dx, dy);                                    // Another frog is busy with it
     } else {
         float cx = bx, cy = by, reach = CRACK_HALF_WIDTH + CRACK_REACH + half;
-        if (crack_closest(&o->crack, bx, by, &cx, &cy) < reach * reach) knock(ball, o, bx - cx, by - cy);
+        if (crack_closest(&o->crack, bx, by, &cx, &cy) < reach * reach) enter_crack(o, ball, cx, cy);
     }
 }
 
@@ -549,7 +602,7 @@ static void collide(Obstacle *o, Ball *ball) {
 void update_calamities(Ball *ball) {
     if (paddle_hits >= checked_hits + CALAMITY_EVERY_HITS) {
         checked_hits += CALAMITY_EVERY_HITS;
-        if (active == CALAMITY_NONE && rand() % 100 < CALAMITY_CHANCE) {
+        if (active == CALAMITY_NONE && rand() % 100 < calamity_chance) {
             int pick = rand() % 3;
             if (pick == 0) start_mole();
             else if (pick == 1) start_earthquake();
@@ -559,6 +612,7 @@ void update_calamities(Ball *ball) {
     if (title_timer >= 0 && ++title_timer >= CALAMITY_TITLE_FRAMES) title_timer = -1;
     if (tremor_timer > 0) tremor_timer--;
     if (catch_block > 0) catch_block--;
+    if (tunnel_exit && --tunnel_timer <= 0) emerge();
 
     if (active != CALAMITY_NONE) {
         calamity_timer++;

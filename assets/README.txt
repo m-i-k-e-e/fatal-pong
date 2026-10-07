@@ -33,7 +33,11 @@ CONTROLS
   Quit               Touchpad click + Options
   New match          Cross (after a player wins)
 
-With one controller, player 1 uses the left stick and player 2 the right stick.
+With one controller, it's split in two: player 1 moves with the D-pad or left stick and uses L1
+for the specials, player 2 moves with the right stick and uses Square or R1.
+
+In the pause menu, up/down picks a setting and left/right changes it: the ball's starting
+speed (50 to 200%) and the calamity chance.
 
 
 RULES
@@ -46,7 +50,8 @@ RULES
   - One fireball per player at a time; two fireballs cancel each other out.
   - A rift opens under the opponent's feet. If they haven't stepped off it within half a
     second, they fall through and are gone for 1 second: the ball goes straight past.
-  - Every 10th paddle hit has a 26% chance of bringing a calamity, for 20 seconds:
+  - Every 10th paddle hit has a 26% chance of bringing a calamity, for 20 seconds (change the
+    chance from 0 to 100% in the pause menu):
       The mole        Digs 3 to 5 molehills around the court and keeps moving them.
       The earthquake  Every tremor shakes the ground and opens a crack, 3 to 5 at a
                       time, old ones closing as new ones open.

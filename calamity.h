@@ -1,6 +1,6 @@
-// Calamities: every CALAMITY_EVERY_HITS paddle hits there's a CALAMITY_CHANCE % chance of one, picked at random:
+// Calamities: every CALAMITY_EVERY_HITS paddle hits there's a calamity_chance % chance of one, picked at random:
 // the mole, who digs molehills, the earthquake, whose tremors open cracks, or the frog rain, whose frogs land in
-// the way. Any of them knocks the ball off course.
+// the way. Any of them knocks the ball off course; a crack swallows it and sends it out of another one.
 #ifndef PONG_CALAMITY_H
 #define PONG_CALAMITY_H
 
@@ -8,11 +8,14 @@
 #include "game.h"
 
 #define CALAMITY_EVERY_HITS 10
-#define CALAMITY_CHANCE     26          // Percent
+#define CALAMITY_CHANCE_DEFAULT 26      // Percent, until changed in the pause menu
+#define CALAMITY_CHANCE_STEP 5
 #define CALAMITY_DURATION   (20 * 60)   // Frames a calamity lasts, from its arrival
 #define CALAMITY_MIN        3           // Molehills, cracks or frogs standing at once
 #define CALAMITY_MAX        5
 #define CALAMITY_TITLE_FRAMES 150       // "INCOMING MOLE" / "THE EARTHQUAKE" / "THE FROG RAIN" on screen
+
+extern int calamity_chance;             // Percent, 0..100: set with the slider in the pause menu
 
 void init_calamities(SDL_Renderer *renderer);
 void free_calamities(void);

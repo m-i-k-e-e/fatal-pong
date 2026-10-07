@@ -6,8 +6,10 @@
 // tools/gen_sprites.py, drawn 2x wide (64 px) and stretched to the paddle's height, so the grow/shrink/full
 // bonuses visibly resize the player. Art faces right with the racket on the front side; the right-hand player is mirrored.
 // The collision box stays the paddle rect, its front edge lined up with art column FRONT_COL.
+// A shrunk player is drawn as a baby: the same layers and poses on a 32x40 canvas (square pixels at half height).
 #define SPRITE_W            32
 #define SPRITE_H            80
+#define BABY_H              40
 #define SPRITE_SCALE        2
 #define FRONT_COL           24
 #define STEP_POSES          4
@@ -20,6 +22,7 @@
 #define FEET_COL            12.75f   // Art column centered between the shoes
 #define FEET_ROW            77.0f    // Art row just below the soles
 #define SHADOW_RX           30       // Ground shadow half-size in screen pixels
+#define BABY_SHADOW_RX      22
 #define SHADOW_RY           9
 #define SHADOW_DX           10       // Offset toward the lower right, away from the upper-left light
 #define SHADOW_ALPHA        90
@@ -32,6 +35,12 @@ static const float POINTS[][2] = {
     [POINT_NECK] = { 13.0f, 40.0f },    // Top of the neck stump
     [POINT_FEET] = { FEET_COL, FEET_ROW },  // Ground between the shoes
 };
+static const float BABY_POINTS[][2] = {
+    [POINT_HAND] = { 25.0f, 20.0f },
+    [POINT_FACE] = { 12.5f, 11.0f },
+    [POINT_NECK] = { 12.5f, 17.5f },
+    [POINT_FEET] = { FEET_COL, 39.0f },
+};
 
 // Agassi, early 90s: bleached mullet, black and neon-pink shirt, acid-wash denim shorts.
 // Nadal, mid 2000s: long hair and red headband, sleeveless lime top, white pirate capris.
@@ -40,7 +49,6 @@ static const float POINTS[][2] = {
 typedef struct {
     SDL_Texture *body;
     SDL_Texture *headless;
-    SDL_Texture *racket;
     SDL_Texture *legs[STEP_POSES];
     SDL_Texture *left_arm[LEFT_ARM_POSES];
     SDL_Texture *arm[ARM_POSES];
@@ -52,7 +60,13 @@ static const char *const *const RACKETS[PLAYER_COUNT] = { AGASSI_RACKET, NADAL_R
 static const char *const (*const LEGS[PLAYER_COUNT])[SPRITE_H] = { AGASSI_LEGS, NADAL_LEGS };
 static const char *const (*const LEFT_ARMS[PLAYER_COUNT])[SPRITE_H] = { AGASSI_LEFT_ARM, NADAL_LEFT_ARM };
 static const char *const (*const ARMS[PLAYER_COUNT])[SPRITE_H] = { AGASSI_ARM, NADAL_ARM };
-static PlayerTextures textures[PLAYER_COUNT];
+static const char *const *const BABY_BODIES[PLAYER_COUNT] = { AGASSI_BABY_BODY, NADAL_BABY_BODY };
+static const char *const *const BABY_HEADLESS[PLAYER_COUNT] = { AGASSI_BABY_HEADLESS, NADAL_BABY_HEADLESS };
+static const char *const (*const BABY_LEGS[PLAYER_COUNT])[BABY_H] = { AGASSI_BABY_LEGS, NADAL_BABY_LEGS };
+static const char *const (*const BABY_LEFT_ARMS[PLAYER_COUNT])[BABY_H] = { AGASSI_BABY_LEFT_ARM, NADAL_BABY_LEFT_ARM };
+static const char *const (*const BABY_ARMS[PLAYER_COUNT])[BABY_H] = { AGASSI_BABY_ARM, NADAL_BABY_ARM };
+static PlayerTextures textures[PLAYER_COUNT], babies[PLAYER_COUNT];
+static SDL_Texture *rackets[PLAYER_COUNT];
 static bool sprites_ok;
 
 // Texture from w x h character art in the generated palette; NULL on failure
@@ -72,23 +86,29 @@ static SDL_Texture *build_sized(SDL_Renderer *renderer, const char *const *art, 
     return tex;
 }
 
-// Texture from one SPRITE_W x SPRITE_H sprite layer
-static SDL_Texture *build_texture(SDL_Renderer *renderer, const char *const *art) {
-    return build_sized(renderer, art, SPRITE_W, SPRITE_H);
+// Build one size's layers and poses (`h` rows each) into `t`; false if any texture failed.
+// The pose arrays are flattened: pose f starts at row f * h.
+static bool build_set(SDL_Renderer *renderer, PlayerTextures *t, const char *const *body,
+                      const char *const *headless, const char *const *legs, const char *const *left_arm,
+                      const char *const *arm, int h) {
+    bool ok = (t->body = build_sized(renderer, body, SPRITE_W, h)) != NULL;
+    ok &= (t->headless = build_sized(renderer, headless, SPRITE_W, h)) != NULL;
+    for (int f = 0; f < STEP_POSES; f++) ok &= (t->legs[f] = build_sized(renderer, legs + f * h, SPRITE_W, h)) != NULL;
+    for (int f = 0; f < LEFT_ARM_POSES; f++) ok &= (t->left_arm[f] = build_sized(renderer, left_arm + f * h, SPRITE_W, h)) != NULL;
+    for (int f = 0; f < ARM_POSES; f++) ok &= (t->arm[f] = build_sized(renderer, arm + f * h, SPRITE_W, h)) != NULL;
+    return ok;
 }
 
-// Build every player texture (layers and poses, headless body, racket) once at startup; if any fails,
-// draw_player() falls back to plain paddles
+// Build every player texture (adult and baby layers and poses, headless bodies, racket) once at startup; if
+// any fails, draw_player() falls back to plain paddles
 void init_player_sprites(SDL_Renderer *renderer) {
     sprites_ok = true;
     for (int i = 0; i < PLAYER_COUNT; i++) {
-        PlayerTextures *t = &textures[i];
-        sprites_ok &= (t->body = build_texture(renderer, BODIES[i])) != NULL;
-        sprites_ok &= (t->headless = build_texture(renderer, HEADLESS[i])) != NULL;
-        sprites_ok &= (t->racket = build_sized(renderer, RACKETS[i], RACKET_W, RACKET_H)) != NULL;
-        for (int f = 0; f < STEP_POSES; f++) sprites_ok &= (t->legs[f] = build_texture(renderer, LEGS[i][f])) != NULL;
-        for (int f = 0; f < LEFT_ARM_POSES; f++) sprites_ok &= (t->left_arm[f] = build_texture(renderer, LEFT_ARMS[i][f])) != NULL;
-        for (int f = 0; f < ARM_POSES; f++) sprites_ok &= (t->arm[f] = build_texture(renderer, ARMS[i][f])) != NULL;
+        sprites_ok &= build_set(renderer, &textures[i], BODIES[i], HEADLESS[i], LEGS[i][0], LEFT_ARMS[i][0],
+                                ARMS[i][0], SPRITE_H);
+        sprites_ok &= build_set(renderer, &babies[i], BABY_BODIES[i], BABY_HEADLESS[i], BABY_LEGS[i][0],
+                                BABY_LEFT_ARMS[i][0], BABY_ARMS[i][0], BABY_H);
+        sprites_ok &= (rackets[i] = build_sized(renderer, RACKETS[i], RACKET_W, RACKET_H)) != NULL;
     }
     if (!sprites_ok) printf("[pong] player sprites failed, drawing plain paddles: %s\n", SDL_GetError());
 }
@@ -99,17 +119,28 @@ static void destroy(SDL_Texture **tex) {
     *tex = NULL;
 }
 
+// Destroy one size's layers and poses
+static void destroy_set(PlayerTextures *t) {
+    destroy(&t->body);
+    destroy(&t->headless);
+    for (int f = 0; f < STEP_POSES; f++) destroy(&t->legs[f]);
+    for (int f = 0; f < LEFT_ARM_POSES; f++) destroy(&t->left_arm[f]);
+    for (int f = 0; f < ARM_POSES; f++) destroy(&t->arm[f]);
+}
+
 // Destroy every texture made by init_player_sprites()
 void free_player_sprites(void) {
     for (int i = 0; i < PLAYER_COUNT; i++) {
-        destroy(&textures[i].body);
-        destroy(&textures[i].headless);
-        destroy(&textures[i].racket);
-        for (int f = 0; f < STEP_POSES; f++) destroy(&textures[i].legs[f]);
-        for (int f = 0; f < LEFT_ARM_POSES; f++) destroy(&textures[i].left_arm[f]);
-        for (int f = 0; f < ARM_POSES; f++) destroy(&textures[i].arm[f]);
+        destroy_set(&textures[i]);
+        destroy_set(&babies[i]);
+        destroy(&rackets[i]);
     }
     sprites_ok = false;
+}
+
+// A shrunk player is drawn (and aimed at) as the baby
+static bool is_baby(const Paddle *p) {
+    return p->effect == BONUS_SHRINK;
 }
 
 // Steps through stand / left foot up / stand / right foot up while moving
@@ -135,13 +166,13 @@ static void arm_poses(const Paddle *p, int *left, int *right) {
     else { *left = 0; *right = swing_frame(p); }
 }
 
-// Soft oval on the grass under the feet, drawn as blended scanlines
-static void draw_shadow(SDL_Renderer *renderer, int cx, int cy) {
+// Soft oval `rx` wide (half-size) on the grass under the feet, drawn as blended scanlines
+static void draw_shadow(SDL_Renderer *renderer, int cx, int cy, int rx) {
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer, 10, 30, 10, SHADOW_ALPHA);
     for (int dy = -SHADOW_RY; dy <= SHADOW_RY; dy++) {
         float k = 1.0f - (float)(dy * dy) / (SHADOW_RY * SHADOW_RY);
-        int half = (int)(SHADOW_RX * SDL_sqrtf(k));
+        int half = (int)(rx * SDL_sqrtf(k));
         SDL_Rect line = { cx - half, cy + dy, half * 2, 1 };
         SDL_RenderFillRect(renderer, &line);
     }
@@ -155,12 +186,15 @@ static SDL_Rect sprite_rect(const Paddle *p, bool faces_right) {
     return dst;
 }
 
-// Screen position of a sprite feature (POINTS) for the paddle as currently drawn, mirrored for the right player
+// Screen position of a sprite feature (POINTS, or BABY_POINTS while shrunk) for the paddle as currently drawn,
+// mirrored for the right player
 void player_point(const Paddle *p, bool faces_right, PlayerPoint point, int *x, int *y) {
     SDL_Rect dst = sprite_rect(p, faces_right);
-    float col = faces_right ? POINTS[point][0] : SPRITE_W - POINTS[point][0];
+    bool baby = is_baby(p);
+    const float *pt = baby ? BABY_POINTS[point] : POINTS[point];
+    float col = faces_right ? pt[0] : SPRITE_W - pt[0];
     *x = dst.x + (int)(col * SPRITE_SCALE);
-    *y = dst.y + (int)(dst.h * POINTS[point][1] / SPRITE_H);
+    *y = dst.y + (int)(dst.h * pt[1] / (baby ? BABY_H : SPRITE_H));
 }
 
 // The thrown racket, centered on (cx, cy) and turned by angle degrees
@@ -168,11 +202,11 @@ void draw_racket(SDL_Renderer *renderer, PlayerLook look, int cx, int cy, double
     if (!sprites_ok) return;
     int w = RACKET_W * RACKET_SCALE, h = RACKET_H * RACKET_SCALE;
     SDL_Rect dst = { cx - w / 2, cy - h / 2, w, h };
-    SDL_RenderCopyEx(renderer, textures[look].racket, NULL, &dst, angle, NULL, SDL_FLIP_NONE);
+    SDL_RenderCopyEx(renderer, rackets[look], NULL, &dst, angle, NULL, SDL_FLIP_NONE);
 }
 
 // Flashes blue while stunned; hidden, shadow included, while ghosted; sinks into the ground through a rift,
-// tinted purple and cut off at the feet line
+// tinted purple and cut off at the feet line; a baby while shrunk
 void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool faces_right) {
     float depth = vanish_depth(p);
     if (p->effect == BONUS_GHOST || depth >= 1.0f) return;
@@ -186,19 +220,20 @@ void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool 
         return;
     }
 
-    const PlayerTextures *t = &textures[look];
+    bool baby = is_baby(p);
+    const PlayerTextures *t = baby ? &babies[look] : &textures[look];
     int left, right;
     arm_poses(p, &left, &right);
     SDL_Texture *stack[4] = { p->headless ? t->headless : t->body, t->legs[step_frame(p)], t->left_arm[left], t->arm[right] };
     SDL_Rect dst = sprite_rect(p, faces_right);
-    float feet_col = faces_right ? FEET_COL : SPRITE_W - FEET_COL;
-    int ground = dst.y + (int)(dst.h * FEET_ROW / SPRITE_H);
+    int feet_x, ground;
+    player_point(p, faces_right, POINT_FEET, &feet_x, &ground);
     if (depth > 0.0f) {
         SDL_Rect above = { 0, 0, SCREEN_WIDTH, ground };
         SDL_RenderSetClipRect(renderer, &above);
         dst.y += (int)(depth * dst.h);
     } else {
-        draw_shadow(renderer, dst.x + (int)(feet_col * SPRITE_SCALE) + SHADOW_DX, ground);
+        draw_shadow(renderer, feet_x + SHADOW_DX, ground, baby ? BABY_SHADOW_RX : SHADOW_RX);
     }
     for (int i = 0; i < 4; i++) {
         if (depth > 0.0f) SDL_SetTextureColorMod(stack[i], 200, 140, 255);

@@ -30,19 +30,19 @@ through `bash -c '...'`.
 | `main.c` | SDL setup, controller handling, game states (start, playing, paused, then FINISH / FATALITY / RESULT after the last point), main loop |
 | `game.h` | Shared constants, `BonusType`, `Paddle`, `Ball`, `rects_overlap` |
 | `paddle.c` | Movement (speed scale, bonus effects, stun), animation state (`stride`, `moving`, timers) |
-| `ball.c` | Ball physics, paddle hits, rally speed-up (`speed_scale`), zig-zag |
-| `fireball.c` | Special move input (down, forward, Square/R1: hadouken; down, back, Square/R1: rift), fireballs, hits on paddle/ball/fireball |
+| `ball.c` | Ball physics, paddle hits, rally speed-up (`speed_scale`, on top of `ball_base_speed()`), zig-zag, grunts |
+| `fireball.c` | Special move input (down, forward, Square/R1: hadouken; down, back, Square/R1: rift; a shared pad is split, `PadPart`: left half D-pad/left stick + L1, right half right stick + Square/R1), fireballs, hits on paddle/ball/fireball |
 | `rift.c` | Rift under the opponent: half-second warning, then a caught player sinks, is gone (`vanish_timer`, ball passes), and rises back |
 | `fatality.c` | End-of-match fatality: thrown racket, head explosion, blood particles with gravity, stains, shake |
-| `calamity.c` | Calamities rolled every 10th paddle hit (`paddle_hits` in ball.c): the mole (molehills), the earthquake (tremors that shake the screen and open cracks) or the frog rain (frogs landing in the way that swallow the ball, also with their tongue from a distance, and spit it out half a second later via `Ball.held` / `hidden`, plus decorative rain drawn in a sky layer over the players); shared obstacle timeline, ball knocks, the mud / rock / slime titles |
+| `calamity.c` | Calamities rolled every 10th paddle hit (`paddle_hits` in ball.c): the mole (molehills), the earthquake (tremors that shake the screen and open cracks; a ball that runs into a crack tunnels out of another one) or the frog rain (frogs landing in the way that swallow the ball, also with their tongue from a distance, and spit it out half a second later via `Ball.held` / `hidden`, plus decorative rain drawn in a sky layer over the players); shared obstacle timeline, ball knocks, the mud / rock / slime titles |
 | `bonus.c` | Bonus spawning, pickup, paddle effects, tiles and icons (textures from `bonus_icons.inc`), names/descriptions |
 | `players.c` | Player sprites: builds textures from `player_sprites.inc`, picks poses, ground shadow |
 | `hud.c` | Grass court texture, scores, dripping blood, mud, rock and slime lettering, start, finish-him, fatality and win screens |
-| `pause.c` | Options help overlay (move list, bonus legend) |
+| `pause.c` | Options help overlay (move list, bonus legend) and the settings sliders (up/down to pick, left/right to change while paused): ball start speed (`ball_speed_percent` in ball.c) and calamity chance (`calamity_chance` in calamity.c) |
 | `draw.c` | Shared drawing helpers (`fill_pixel_oval`, used by the rift and the molehills) |
 | `text.c` | 5x7 bitmap font (the SDK has no SDL_ttf) |
 | `particles.c` | Fire trails and explosions |
-| `audio.c` | Embedded WAV clips, synthesized hadouken fallback, splat, rift, mole, quake, croak, tongue and spit sounds, software mixer |
+| `audio.c` | Embedded WAV clips (announcer, hadouken, racket boomerang, fatality scream, grunts), synthesized hadouken fallback, splat, rift, mole, quake, croak, tongue and spit sounds, software mixer |
 | `tools/gen_sprites.py` | Generates `player_sprites.inc` (sprites + palette) and the `assets/` previews |
 | `tools/gen_bonus_icons.py` | Generates `bonus_icons.inc` (the eight 16x16 bonus icons + palette, in `BonusType` order) and `assets/bonus_icons.png` |
 | `tools/gen_voice.sh` | Generates the announcer clips (`agassi-wins`, `nadal-wins`, `finish-him`, `fatality` .mp3) with Piper TTS + ffmpeg; pass clip names to regenerate only those |
@@ -80,6 +80,9 @@ the build uses the SDK's SDL2 headers.
 - Each player is four stacked 32x80 layers (body, legs, left arm, racket arm), drawn 2x wide and stretched
   to the paddle height. Art faces right; the right-hand player is mirrored. The paddle's collision rect stays
   24 px wide, its front edge on art column `FRONT_COL` (players.c).
+- A shrunk player (`BONUS_SHRINK`) is drawn as a baby: the same layers and poses on a 32x40 canvas
+  (`BABY_H`), square pixels at the half-height paddle, previewed in `assets/babies.png`. Its feature points are
+  `BABY_POINTS` (players.c); keep them in sync with the baby layout in the generator.
 - Pose counts and indices are shared between the generator and `players.c` (`STEP_POSES`, `LEFT_ARM_POSES`,
   `ARM_POSES`, `POSE_CHARGE`, `POSE_THRUST`); keep them in sync.
 - `THROW_HAND_Y` (fireball.h) is the hands' height in the thrust pose and sets where fireballs spawn; update

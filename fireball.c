@@ -31,27 +31,31 @@ static void throw_fireball(int owner, const Paddle *p) {
 }
 
 // Special move recognition state machine: Down -> Forward -> Attack button throws a fireball (hadouken),
-// Down -> Back -> Attack button opens a rift under the opponent
-void update_special_input(Paddle *p, Paddle *opponent, bool is_p1, SDL_GameController *pad) {
+// Down -> Back -> Attack button opens a rift under the opponent. On a whole pad the directions are the D-pad
+// or left stick and the attack is Square or R1; a shared pad is split: the left half (D-pad, left stick, L1)
+// and the right half (right stick, Square or R1).
+void update_special_input(Paddle *p, Paddle *opponent, bool is_p1, SDL_GameController *pad, PadPart part) {
     if (!pad || p->stun_timer > 0 || p->vanish_timer > 0) return;
 
     if (p->motion_timer > 0) p->motion_timer--;
     else p->motion_state = 0;
 
-    bool down = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN) ||
-                (SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTY) > 16000);
+    bool dpad = part != PAD_RIGHT_HALF;
+    SDL_GameControllerAxis ax = part == PAD_RIGHT_HALF ? SDL_CONTROLLER_AXIS_RIGHTX : SDL_CONTROLLER_AXIS_LEFTX;
+    SDL_GameControllerAxis ay = part == PAD_RIGHT_HALF ? SDL_CONTROLLER_AXIS_RIGHTY : SDL_CONTROLLER_AXIS_LEFTY;
+    bool down = (dpad && SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN)) ||
+                SDL_GameControllerGetAxis(pad, ay) > 16000;
+    bool right = (dpad && SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) ||
+                 SDL_GameControllerGetAxis(pad, ax) > 16000;
+    bool left = (dpad && SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT)) ||
+                SDL_GameControllerGetAxis(pad, ax) < -16000;
+    bool fwd = is_p1 ? right : left;
+    bool back = is_p1 ? left : right;
 
-    bool fwd = is_p1 ? (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT) ||
-                        SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX) > 16000)
-                     : (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT) ||
-                        SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX) < -16000);
-    bool back = is_p1 ? (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT) ||
-                         SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX) < -16000)
-                      : (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT) ||
-                         SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX) > 16000);
-
-    // Punch button: Square (Button X) or Right Shoulder (R1)
-    bool attack = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_X) ||
+    // Punch button: Square (Button X) or R1, or L1 for the left half of a shared pad
+    bool attack = part == PAD_LEFT_HALF
+                ? SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSHOULDER)
+                : SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_X) ||
                   SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
 
     if (p->motion_state == 0 && down) {
@@ -91,7 +95,7 @@ void update_fireballs(Paddle *p1, Paddle *p2, Ball *ball) {
             // Send the ball the fireball's way; hitting it off-center angles it like a paddle hit
             float impact = ((ball->y + ball->size / 2.0f) - (f->y + FIREBALL_H / 2.0f)) / (FIREBALL_H / 2.0f + ball->size / 2.0f);
             speed_up();
-            float speed = INITIAL_BALL_SPEED * speed_scale;
+            float speed = ball_base_speed() * speed_scale;
             ball->vx = f->vx > 0 ? speed : -speed;
             ball->vy = impact * speed;
             spawn_explosion(ball->x + ball->size / 2.0f, ball->y + ball->size / 2.0f, 25);

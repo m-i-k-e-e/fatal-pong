@@ -3,6 +3,7 @@
 #define PONG_GAME_H
 
 #include <stdbool.h>
+#include <stdlib.h>
 
 #define SCREEN_WIDTH        1920
 #define SCREEN_HEIGHT       1080
@@ -15,7 +16,7 @@
 #define THROW_DURATION      18          // Hadouken thrust pose length after a fireball throw
 
 #define BALL_SIZE           22
-#define INITIAL_BALL_SPEED  12
+#define INITIAL_BALL_SPEED  12          // Serve speed at 100% in the pause menu
 #define WINNING_SCORE       10
 
 typedef enum {
@@ -58,6 +59,12 @@ typedef struct {
     bool held;          // Caught by a frog: frozen, moved by the frog's tongue (see calamity.c)
     bool hidden;        // Swallowed by a frog: not drawn
 } Ball;
+
+// Uniform random float in [0, 1]. Uses only rand()'s low 15 bits: the SDK's stdlib.h says RAND_MAX is
+// 0x7ffffffd, but the PS5's libc rand() only goes up to 32767, so rand() / RAND_MAX was always about 0.
+static inline float rand01(void) {
+    return (rand() & 0x7fff) / 32767.0f;
+}
 
 static inline bool rects_overlap(float ax, float ay, float aw, float ah, float bx, float by, float bw, float bh) {
     return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;

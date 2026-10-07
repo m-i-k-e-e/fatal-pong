@@ -16,7 +16,10 @@ TARGET      := $(INSTALL_DIR)/eboot.elf
 ICON        := $(INSTALL_DIR)/sce_sys/icon0.png
 SOUNDS      := $(BUILD_DIR)/hadouken.wav $(BUILD_DIR)/tennis-ball.wav \
                $(BUILD_DIR)/agassi-wins.wav $(BUILD_DIR)/nadal-wins.wav \
-               $(BUILD_DIR)/finish-him.wav $(BUILD_DIR)/fatality.wav
+               $(BUILD_DIR)/finish-him.wav $(BUILD_DIR)/fatality.wav \
+               $(BUILD_DIR)/cartoon-boomerang.wav $(BUILD_DIR)/fatality-scream.wav
+GRUNTS      := $(BUILD_DIR)/grunt.wav $(BUILD_DIR)/kasplat-grunt.wav
+SOUNDS      += $(GRUNTS)
 
 # Use the SDK's prospero toolchain and its bundled SDL2 (not a local copy of the headers).
 # EMBED_DIR is where audio.c .incbin's the converted sounds from.
@@ -50,6 +53,11 @@ $(BUILD_DIR) $(INSTALL_DIR):
 $(BUILD_DIR)/%.wav: %.mp3 | $(BUILD_DIR)
 	ffmpeg -y -loglevel error -i $< -ac 1 -ar 48000 -c:a pcm_s16le \
 		-af "areverse,silenceremove=start_periods=1:start_threshold=-60dB,areverse" $@
+
+# Grunts also lose their leading silence, so they land with the hit
+$(GRUNTS): $(BUILD_DIR)/%.wav: %.mp3 | $(BUILD_DIR)
+	ffmpeg -y -loglevel error -i $< -ac 1 -ar 48000 -c:a pcm_s16le \
+		-af "silenceremove=start_periods=1:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_threshold=-60dB,areverse" $@
 
 clean:
 	rm -rf $(BUILD_DIR)

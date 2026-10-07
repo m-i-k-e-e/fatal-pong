@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <time.h>
 
 #include "game.h"
 #include "audio.h"
@@ -49,6 +50,7 @@ int main(int argc, char *argv[]) {
     (void)argc; (void)argv;
 
     printf("[pong] starting\n");
+    srand((unsigned int)time(NULL));               // A different game every launch
     {
         off_t phys = 0;
         size_t avail = 0;
@@ -134,6 +136,7 @@ int main(int argc, char *argv[]) {
             options_was_down[i] = options;
         }
         if (toggle_pause) paused = !paused;
+        if (paused) update_pause_menu(pad1, pad2);
 
         // Cross presses (edge) start the game from the start screen and a new match from the win screen
         bool cross = (pad1 && SDL_GameControllerGetButton(pad1, SDL_CONTROLLER_BUTTON_A)) ||
@@ -145,8 +148,9 @@ int main(int argc, char *argv[]) {
 
         // Special move motions (hadouken, rift)
         if (winner == 0 && playing) {
-            update_special_input(&p1, &p2, true, pad1);
-            update_special_input(&p2, &p1, false, pad2 ? pad2 : pad1);
+            // A shared pad is split in two halves (see update_special_input)
+            update_special_input(&p1, &p2, true, pad1, pad2 ? PAD_WHOLE : PAD_LEFT_HALF);
+            update_special_input(&p2, &p1, false, pad2 ? pad2 : pad1, pad2 ? PAD_WHOLE : PAD_RIGHT_HALF);
         }
 
         // Movement Inputs (with a single pad, P2 uses its right stick)

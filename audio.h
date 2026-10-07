@@ -15,6 +15,10 @@ extern Sound snd_agassi_wins;     // Announcer, made by tools/gen_voice.sh
 extern Sound snd_nadal_wins;
 extern Sound snd_finish_him;
 extern Sound snd_fatality;
+extern Sound snd_boomerang;     // Fatality: the thrown racket, the loser's scream as the head explodes
+extern Sound snd_scream;
+#define GRUNT_COUNT 2
+extern Sound snd_grunts[GRUNT_COUNT];   // A player grunting on a hit, picked at random
 extern Sound snd_splat;         // Synthesized gore for the fatality
 extern Sound snd_rift;          // Synthesized: the rift opening, and it swallowing a player
 extern Sound snd_rift_snap;

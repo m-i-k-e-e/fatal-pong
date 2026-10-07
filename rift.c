@@ -30,7 +30,7 @@ static int ticks;                       // Drives the swirl
 
 // Random float in [lo, hi]
 static float frand(float lo, float hi) {
-    return lo + (hi - lo) * (rand() / (float)RAND_MAX);
+    return lo + (hi - lo) * rand01();
 }
 
 // Keep the paddle fully on screen

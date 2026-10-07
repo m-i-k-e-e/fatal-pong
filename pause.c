@@ -2,6 +2,7 @@
 #include "bonus.h"
 #include "fireball.h"
 #include "rift.h"
+#include "ball.h"
 #include "calamity.h"
 #include "text.h"
 #include <stdio.h>
@@ -11,6 +12,103 @@
 #define PANEL_X     ((SCREEN_WIDTH - PANEL_W) / 2)
 #define PANEL_Y     ((SCREEN_HEIGHT - PANEL_H) / 2)
 #define TEXT_X      (PANEL_X + 70)
+#define SLIDER_W    420
+#define SLIDER_H    24
+#define REPEAT_DELAY 20         // Frames a direction is held before it starts repeating
+#define REPEAT_GAP  6
+
+// A setting adjusted with a slider: `label` is a format string given CALAMITY_EVERY_HITS
+typedef struct {
+    const char *label;
+    int *value;
+    int min, max, step;
+} Setting;
+
+static Setting settings[] = {
+    { "BALL START SPEED", &ball_speed_percent, 50, 200, 10 },
+    { "EVERY %dTH HIT, CALAMITY CHANCE", &calamity_chance, 0, 100, CALAMITY_CHANCE_STEP },
+};
+#define SETTING_COUNT ((int)(sizeof(settings) / sizeof(settings[0])))
+
+static int selected;            // The setting left/right changes
+static int held_x, held_y;      // -1, 0 or 1: the directions pushed last frame
+static int held_x_frames, held_y_frames;
+
+// Direction pushed on either pad along one axis: -1 left/up, 1 right/down, 0 neither (D-pad or left stick past
+// its dead zone)
+static int pad_dir(SDL_GameController *pad1, SDL_GameController *pad2, bool horizontal) {
+    for (int i = 0; i < 2; i++) {
+        SDL_GameController *pad = i ? pad2 : pad1;
+        if (!pad) continue;
+        if (SDL_GameControllerGetButton(pad, horizontal ? SDL_CONTROLLER_BUTTON_DPAD_LEFT : SDL_CONTROLLER_BUTTON_DPAD_UP))
+            return -1;
+        if (SDL_GameControllerGetButton(pad, horizontal ? SDL_CONTROLLER_BUTTON_DPAD_RIGHT : SDL_CONTROLLER_BUTTON_DPAD_DOWN))
+            return 1;
+        Sint16 v = SDL_GameControllerGetAxis(pad, horizontal ? SDL_CONTROLLER_AXIS_LEFTX : SDL_CONTROLLER_AXIS_LEFTY);
+        if (v < -16000) return -1;
+        if (v > 16000) return 1;
+    }
+    return 0;
+}
+
+// Track how long `dir` has been held in *held / *frames; returns it on the press and then repeatedly while
+// held, 0 otherwise
+static int repeat(int dir, int *held, int *frames) {
+    *frames = dir == *held ? *frames + 1 : 0;
+    *held = dir;
+    if (dir && (*frames == 0 || (*frames >= REPEAT_DELAY && (*frames - REPEAT_DELAY) % REPEAT_GAP == 0))) return dir;
+    return 0;
+}
+
+// Up/down on either pad picks a setting, left/right changes it by its step: once per press, then repeating
+// while held. Changes ball_speed_percent and calamity_chance.
+void update_pause_menu(SDL_GameController *pad1, SDL_GameController *pad2) {
+    int dy = repeat(pad_dir(pad1, pad2, false), &held_y, &held_y_frames);
+    selected = SDL_clamp(selected + dy, 0, SETTING_COUNT - 1);
+    int dx = repeat(pad_dir(pad1, pad2, true), &held_x, &held_x_frames);
+    Setting *s = &settings[selected];
+    *s->value = SDL_clamp(*s->value + dx * s->step, s->min, s->max);
+}
+
+// The settings, one row each with the bars lined up: label, a bar filled from min to max, the percentage, and
+// on the selected row (label in orange) the "< >" hint
+static void draw_settings(SDL_Renderer *renderer, int y) {
+    char labels[SETTING_COUNT][64];
+    int gap = 30, label_w = 0, value_w = text_width("100%", 3), hint_w = text_width("< >", 3);
+    for (int i = 0; i < SETTING_COUNT; i++) {
+        snprintf(labels[i], sizeof(labels[i]), settings[i].label, CALAMITY_EVERY_HITS);
+        label_w = SDL_max(label_w, text_width(labels[i], 3));
+    }
+    int left = (SCREEN_WIDTH - (label_w + gap + SLIDER_W + gap + value_w + gap + hint_w)) / 2;
+
+    for (int i = 0; i < SETTING_COUNT; i++, y += 40) {
+        const Setting *s = &settings[i];
+        int x = left;
+        if (i == selected) SDL_SetRenderDrawColor(renderer, 255, 140, 0, 255);
+        else SDL_SetRenderDrawColor(renderer, 160, 160, 170, 255);
+        draw_text(renderer, labels[i], x + label_w - text_width(labels[i], 3), y, 3);
+        x += label_w + gap;
+        SDL_Rect track = { x, y - (SLIDER_H - 21) / 2, SLIDER_W, SLIDER_H };
+        SDL_SetRenderDrawColor(renderer, 160, 160, 170, 255);
+        SDL_RenderFillRect(renderer, &track);
+        SDL_Rect inside = { track.x + 3, track.y + 3, track.w - 6, track.h - 6 };
+        SDL_SetRenderDrawColor(renderer, 40, 40, 48, 255);
+        SDL_RenderFillRect(renderer, &inside);
+        inside.w = inside.w * (*s->value - s->min) / (s->max - s->min);
+        SDL_SetRenderDrawColor(renderer, 200, 30, 30, 255);
+        SDL_RenderFillRect(renderer, &inside);
+        x += SLIDER_W + gap;
+        char value[8];
+        snprintf(value, sizeof(value), "%d%%", *s->value);
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        draw_text(renderer, value, x + value_w - text_width(value, 3), y, 3);
+        x += value_w + gap;
+        if (i == selected) {
+            SDL_SetRenderDrawColor(renderer, 0, 220, 255, 255);
+            draw_text(renderer, "< >", x, y, 3);
+        }
+    }
+}
 
 // Orange section heading on the panel's left margin
 static void draw_heading(SDL_Renderer *renderer, const char *s, int y) {
@@ -18,7 +116,8 @@ static void draw_heading(SDL_Renderer *renderer, const char *s, int y) {
     draw_text(renderer, s, TEXT_X, y, 5);
 }
 
-// Drawn over the frozen game: dims the court, then a framed panel with the move list and bonus legend
+// Drawn over the frozen game: dims the court, then a framed panel with the move list, bonus legend and the
+// settings (ball start speed, calamity chance)
 void draw_pause_menu(SDL_Renderer *renderer) {
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 170);
@@ -38,6 +137,9 @@ void draw_pause_menu(SDL_Renderer *renderer) {
     // Special moves: the inputs stand out, each followed by what it does
     int y = PANEL_Y + 130;
     draw_heading(renderer, "SPECIAL MOVES", y);
+    SDL_SetRenderDrawColor(renderer, 160, 160, 170, 255);       // Shared pad split, see update_special_input()
+    draw_text(renderer, "SHARED PAD: LEFT PLAYER L1, RIGHT SQUARE OR R1",
+              TEXT_X + text_width("SPECIAL MOVES", 5) + 40, y + 8, 3);
     y += 56;
     char hadouken_line[80], rift_line[80];
     snprintf(hadouken_line, sizeof(hadouken_line), "  FREEZES THE OPPONENT %d S OR KNOCKS THE BALL BACK",
@@ -82,11 +184,7 @@ void draw_pause_menu(SDL_Renderer *renderer) {
     }
 
     // Footer
-    SDL_SetRenderDrawColor(renderer, 160, 160, 170, 255);
-    char calamity_line[96];
-    snprintf(calamity_line, sizeof(calamity_line), "EVERY HIT SPEEDS UP THE GAME. EVERY %dTH HIT: %d%% CHANCE OF A CALAMITY",
-             CALAMITY_EVERY_HITS, CALAMITY_CHANCE);
-    draw_text_centered(renderer, calamity_line, SCREEN_WIDTH / 2, PANEL_Y + PANEL_H - 100, 3);
+    draw_settings(renderer, PANEL_Y + PANEL_H - 128);
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    draw_text_centered(renderer, "OPTIONS: RESUME      TOUCHPAD + OPTIONS: QUIT", SCREEN_WIDTH / 2, PANEL_Y + PANEL_H - 55, 3);
+    draw_text_centered(renderer, "OPTIONS: RESUME      TOUCHPAD + OPTIONS: QUIT", SCREEN_WIDTH / 2, PANEL_Y + PANEL_H - 42, 3);
 }
