@@ -27,6 +27,12 @@
 #define SHADOW_DX           10       // Offset toward the lower right, away from the upper-left light
 #define SHADOW_ALPHA        90
 #define RACKET_SCALE        3        // Thrown racket, a bit larger than in hand so it reads in flight
+#define IRON_BALL_ART       12       // Ball and chain (slow bonus): ball art size, drawn at SPRITE_SCALE
+#define CHAIN_BEHIND        34       // Screen pixels from the ankle back to the ball's rest spot
+#define CHAIN_DROP          6        // ... and down from the feet line
+#define CHAIN_MAX           70       // Farthest the ball trails behind its rest spot as the player moves
+#define CHAIN_FOLLOW        0.12f    // Fraction of the way the dragged ball closes on its rest spot per frame
+#define CHAIN_LINKS         9
 
 // Art coordinates of points the fatality and the rift aim at (see tools/gen_sprites.py)
 static const float POINTS[][2] = {
@@ -34,12 +40,14 @@ static const float POINTS[][2] = {
     [POINT_FACE] = { 13.0f, 27.0f },    // Middle of the face
     [POINT_NECK] = { 13.0f, 40.0f },    // Top of the neck stump
     [POINT_FEET] = { FEET_COL, FEET_ROW },  // Ground between the shoes
+    [POINT_ANKLE] = { 9.5f, 72.0f },    // Back leg, above the sock, where the ball and chain's cuff goes
 };
 static const float BABY_POINTS[][2] = {
     [POINT_HAND] = { 25.0f, 20.0f },
     [POINT_FACE] = { 12.5f, 11.0f },
     [POINT_NECK] = { 12.5f, 17.5f },
     [POINT_FEET] = { FEET_COL, 39.0f },
+    [POINT_ANKLE] = { 9.5f, 35.5f },
 };
 
 // Agassi, early 90s: bleached mullet, black and neon-pink shirt, acid-wash denim shorts.
@@ -70,6 +78,9 @@ static const char *const (*const BABY_ARMS[PLAYER_COUNT])[BABY_H] = { AGASSI_BAB
 static PlayerTextures textures[PLAYER_COUNT], babies[PLAYER_COUNT];
 static SDL_Texture *rackets[PLAYER_COUNT];
 static bool sprites_ok;
+static SDL_Texture *iron_ball;
+static float chain_ball_y[2];           // Dragged ball and chain, per side (0 = left player): its screen y
+static bool chain_on[2];                // Drawn last frame, so a fresh one starts at rest
 
 // Texture from w x h character art in the generated palette; NULL on failure
 static SDL_Texture *build_sized(SDL_Renderer *renderer, const char *const *art, int w, int h) {
@@ -80,6 +91,30 @@ static SDL_Texture *build_sized(SDL_Renderer *renderer, const char *const *art, 
         for (int x = 0; x < w; x++) {
             SDL_Color c = palette_color(art[y][x]);
             row[x] = SDL_MapRGBA(surf->format, c.r, c.g, c.b, c.a);
+        }
+    }
+    SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
+    SDL_FreeSurface(surf);
+    if (tex) SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+    return tex;
+}
+
+// The ball of the ball and chain: an IRON_BALL_ART pixel iron sphere lit from the upper left, with a dark rim;
+// NULL on failure (then no ball is drawn)
+static SDL_Texture *build_iron_ball(SDL_Renderer *renderer) {
+    static const SDL_Color TONES[] = { { 30, 30, 36, 255 }, { 56, 56, 66, 255 }, { 88, 88, 102, 255 },
+                                       { 128, 128, 144, 255 }, { 190, 190, 204, 255 } };
+    SDL_Surface *surf = SDL_CreateRGBSurfaceWithFormat(0, IRON_BALL_ART, IRON_BALL_ART, 32, SDL_PIXELFORMAT_ARGB8888);
+    if (!surf) return NULL;
+    float c = IRON_BALL_ART / 2.0f, r = c - 0.5f;
+    for (int y = 0; y < IRON_BALL_ART; y++) {
+        Uint32 *row = (Uint32 *)((Uint8 *)surf->pixels + y * surf->pitch);
+        for (int x = 0; x < IRON_BALL_ART; x++) {
+            float nx = (x + 0.5f - c) / r, ny = (y + 0.5f - c) / r, d = nx * nx + ny * ny;
+            float light = -0.55f * nx - 0.65f * ny + 0.5f * SDL_sqrtf(SDL_max(0.0f, 1.0f - d));
+            int tone = d > 0.72f ? 0 : light > 0.75f ? 4 : light > 0.4f ? 3 : light > 0.05f ? 2 : 1;
+            SDL_Color t = TONES[tone];
+            row[x] = SDL_MapRGBA(surf->format, t.r, t.g, t.b, d > 1.0f ? 0 : 255);
         }
     }
     SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
@@ -112,6 +147,7 @@ void init_player_sprites(SDL_Renderer *renderer) {
                                 BABY_LEFT_ARMS[i][0], BABY_ARMS[i][0], BABY_H);
         sprites_ok &= (rackets[i] = build_sized(renderer, RACKETS[i], RACKET_W, RACKET_H)) != NULL;
     }
+    iron_ball = build_iron_ball(renderer);
     if (!sprites_ok) printf("[pong] player sprites failed, drawing plain paddles: %s\n", SDL_GetError());
 }
 
@@ -137,6 +173,7 @@ void free_player_sprites(void) {
         destroy_set(&babies[i]);
         destroy(&rackets[i]);
     }
+    destroy(&iron_ball);
     sprites_ok = false;
 }
 
@@ -207,10 +244,63 @@ void draw_racket(SDL_Renderer *renderer, PlayerLook look, int cx, int cy, double
     SDL_RenderCopyEx(renderer, rackets[look], NULL, &dst, angle, NULL, SDL_FLIP_NONE);
 }
 
+// One chain link, a few pixels on the SPRITE_SCALE grid: flat (`flat`) or edge-on, lit along its top
+static void draw_link(SDL_Renderer *renderer, int x, int y, bool flat) {
+    x = x / SPRITE_SCALE * SPRITE_SCALE;
+    y = y / SPRITE_SCALE * SPRITE_SCALE;
+    SDL_Rect link = flat ? (SDL_Rect){ x - 4, y - 2, 8, 4 } : (SDL_Rect){ x - 2, y - 3, 4, 6 };
+    SDL_SetRenderDrawColor(renderer, 40, 40, 48, 255);
+    SDL_RenderFillRect(renderer, &link);
+    SDL_Rect shine = { link.x, link.y, link.w, 2 };
+    SDL_SetRenderDrawColor(renderer, 140, 140, 156, 255);
+    SDL_RenderFillRect(renderer, &shine);
+}
+
+// Slow bonus, under the sprite: the iron ball on the grass behind the player (side 0 left, 1 right) with its
+// shadow, and the sagging chain up to the back ankle. The ball trails behind the player's moves (chain_ball_y),
+// up to CHAIN_MAX from its rest spot. The cuff goes on after the sprite (draw_cuff).
+static void draw_ball_and_chain(SDL_Renderer *renderer, const Paddle *p, bool faces_right, int ground) {
+    int side = faces_right ? 0 : 1, ax, ay;
+    player_point(p, faces_right, POINT_ANKLE, &ax, &ay);
+    float bx = ax + (faces_right ? -CHAIN_BEHIND : CHAIN_BEHIND), rest_y = (float)(ground + CHAIN_DROP);
+    if (!chain_on[side]) chain_ball_y[side] = rest_y;
+    chain_on[side] = true;
+    chain_ball_y[side] += (rest_y - chain_ball_y[side]) * CHAIN_FOLLOW;
+    chain_ball_y[side] = SDL_clamp(chain_ball_y[side], rest_y - CHAIN_MAX, rest_y + CHAIN_MAX);
+    int by = (int)chain_ball_y[side], size = IRON_BALL_ART * SPRITE_SCALE;
+
+    draw_shadow(renderer, (int)bx + SHADOW_DX / 2, by, size / 2 + 2);
+    // Links from the ankle to the top of the ball, sagging less as the chain pulls taut
+    float tx = bx, ty = (float)(by - size), dist = SDL_sqrtf((tx - ax) * (tx - ax) + (ty - ay) * (ty - ay));
+    float sag = SDL_max(0.0f, 14.0f - dist * 0.12f);
+    for (int i = 1; i < CHAIN_LINKS; i++) {
+        float t = (float)i / CHAIN_LINKS;
+        draw_link(renderer, (int)(ax + (tx - ax) * t), (int)(ay + (ty - ay) * t + sag * SDL_sinf((float)M_PI * t)), i % 2);
+    }
+    if (iron_ball) {
+        SDL_Rect dst = { (int)bx - size / 2, by - size, size, size };
+        SDL_RenderCopy(renderer, iron_ball, NULL, &dst);
+    }
+}
+
+// Slow bonus, over the sprite: the iron cuff round the back ankle
+static void draw_cuff(SDL_Renderer *renderer, const Paddle *p, bool faces_right) {
+    int ax, ay;
+    player_point(p, faces_right, POINT_ANKLE, &ax, &ay);
+    SDL_Rect cuff = { ax - 5, ay - 3, 10, 6 };
+    SDL_SetRenderDrawColor(renderer, 40, 40, 48, 255);
+    SDL_RenderFillRect(renderer, &cuff);
+    SDL_Rect band = { cuff.x + 2, cuff.y + 2, cuff.w - 4, 2 };
+    SDL_SetRenderDrawColor(renderer, 120, 120, 136, 255);
+    SDL_RenderFillRect(renderer, &band);
+}
+
 // Flashes blue while stunned; hidden, shadow included, while ghosted; sinks into the ground through a rift,
-// tinted purple and cut off at the feet line; a baby while shrunk
+// tinted purple and cut off at the feet line; a baby while shrunk; dragging a ball and chain while slowed
 void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool faces_right) {
     float depth = vanish_depth(p);
+    bool chained = p->effect == BONUS_SLOW && depth <= 0.0f && sprites_ok;
+    if (!chained) chain_on[faces_right ? 0 : 1] = false;
     if (p->effect == BONUS_GHOST || depth >= 1.0f) return;
     bool flash = p->stun_timer > 0 && (p->stun_timer / 6) % 2;
 
@@ -236,6 +326,7 @@ void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool 
         dst.y += (int)(depth * dst.h);
     } else {
         draw_shadow(renderer, feet_x + SHADOW_DX, ground, baby ? BABY_SHADOW_RX : SHADOW_RX);
+        if (chained) draw_ball_and_chain(renderer, p, faces_right, ground);
     }
     for (int i = 0; i < 4; i++) {
         if (depth > 0.0f) SDL_SetTextureColorMod(stack[i], 200, 140, 255);
@@ -243,6 +334,7 @@ void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool 
         else SDL_SetTextureColorMod(stack[i], 255, 255, 255);
         SDL_RenderCopyEx(renderer, stack[i], NULL, &dst, 0.0, NULL, faces_right ? SDL_FLIP_NONE : SDL_FLIP_HORIZONTAL);
     }
+    if (chained) draw_cuff(renderer, p, faces_right);
     if (depth > 0.0f) SDL_RenderSetClipRect(renderer, NULL);
 }
 
