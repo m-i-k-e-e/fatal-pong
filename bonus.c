@@ -1,5 +1,6 @@
 #include "bonus.h"
 #include "paddle.h"
+#include "audio.h"
 #include <stdlib.h>
 
 // Spawn in a paddle's lane; the paddle collects one by moving onto it and gets its effect.
@@ -31,7 +32,7 @@ static const char *const BONUS_DESCRIPTIONS[BONUS_COUNT] = {
     "DOUBLE PADDLE HEIGHT",
     "HALF PADDLE HEIGHT",
     "INVISIBLE, STILL BLOCKS",
-    "PADDLE FILLS THE SCREEN",
+    "VADER OR LUKE HOLDS THE LANE",
     "FASTER PADDLE",
     "SLOWER PADDLE",
     "UP AND DOWN SWAPPED",
@@ -60,14 +61,19 @@ void clear_paddle_effect(Paddle *p) {
     set_paddle_height(p, PADDLE_HEIGHT);
 }
 
-// Give the paddle bonus `t` for BONUS_DURATION, replacing any active one; resizes it for the size bonuses
+// Give the paddle bonus `t` for BONUS_DURATION, replacing any active one; resizes it for the size bonuses. Full
+// height brings in Vader or Luke at random, igniting a lightsaber.
 static void apply_bonus(Paddle *p, BonusType t) {
     clear_paddle_effect(p);
     p->effect = t;
     p->effect_timer = BONUS_DURATION;
     if (t == BONUS_GROW) set_paddle_height(p, PADDLE_HEIGHT * 2);
     else if (t == BONUS_SHRINK) set_paddle_height(p, PADDLE_HEIGHT / 2);
-    else if (t == BONUS_FULL) set_paddle_height(p, SCREEN_HEIGHT);
+    else if (t == BONUS_FULL) {
+        set_paddle_height(p, SCREEN_HEIGHT);
+        p->force_user = rand() % 2;
+        play_sound(&snd_saber);
+    }
 }
 
 // Count down the paddle's active bonus and clear it when it runs out

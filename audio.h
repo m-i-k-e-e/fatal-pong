@@ -26,6 +26,8 @@ extern Sound snd_rift_snap;
 extern Sound snd_mole;          // Synthesized: the mole's arrival (rumble underground), a ball hitting a molehill
 extern Sound snd_thud;
 extern Sound snd_quake;         // Synthesized: an earthquake tremor, the ground cracking
+extern Sound snd_saber;         // Synthesized: a lightsaber igniting (Vader or Luke arrives), the Force pushing the ball
+extern Sound snd_force;
 extern Sound snd_ribbit;        // Synthesized: a frog's croak
 extern Sound snd_tongue;        // Synthesized: a frog's tongue shooting out, and the ball spat back out
 extern Sound snd_spit;

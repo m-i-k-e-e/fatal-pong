@@ -7,6 +7,8 @@
 // bonuses visibly resize the player. Art faces right with the racket on the front side; the right-hand player is mirrored.
 // The collision box stays the paddle rect, its front edge lined up with art column FRONT_COL.
 // A shrunk player is drawn as a baby: the same layers and poses on a 32x40 canvas (square pixels at half height).
+// With the full-height bonus a force user stands in instead (Vader or Luke, Paddle.force_user): FORCE_SCALE
+// times the art, in the middle of the lane, pushing the Force (force_push) where the ball comes back.
 #define SPRITE_W            32
 #define SPRITE_H            80
 #define BABY_H              40
@@ -33,6 +35,11 @@
 #define CHAIN_MAX           70       // Farthest the ball trails behind its rest spot as the player moves
 #define CHAIN_FOLLOW        0.12f    // Fraction of the way the dragged ball closes on its rest spot per frame
 #define CHAIN_LINKS         9
+#define FORCE_USERS         2        // Vader, Luke
+#define FORCE_ARM_POSES     2        // Idle, push
+#define FORCE_SCALE         3
+#define FORCE_FRAMES        24       // A Force wave's length, also how long the push pose holds
+#define FORCE_RIPPLES       5
 
 // Art coordinates of points the fatality and the rift aim at (see tools/gen_sprites.py)
 static const float POINTS[][2] = {
@@ -41,6 +48,13 @@ static const float POINTS[][2] = {
     [POINT_NECK] = { 13.0f, 40.0f },    // Top of the neck stump
     [POINT_FEET] = { FEET_COL, FEET_ROW },  // Ground between the shoes
     [POINT_ANKLE] = { 9.5f, 72.0f },    // Back leg, above the sock, where the ball and chain's cuff goes
+};
+static const float FORCE_POINTS[][2] = {
+    [POINT_HAND] = { 29.0f, 46.0f },    // Open palm in the push pose (FORCE_HAND in the generator)
+    [POINT_FACE] = { 13.0f, 27.0f },
+    [POINT_NECK] = { 13.0f, 40.0f },
+    [POINT_FEET] = { FEET_COL, FEET_ROW },
+    [POINT_ANKLE] = { 10.0f, 72.0f },
 };
 static const float BABY_POINTS[][2] = {
     [POINT_HAND] = { 25.0f, 20.0f },
@@ -76,6 +90,15 @@ static const char *const (*const BABY_LEGS[PLAYER_COUNT])[BABY_H] = { AGASSI_BAB
 static const char *const (*const BABY_LEFT_ARMS[PLAYER_COUNT])[BABY_H] = { AGASSI_BABY_LEFT_ARM, NADAL_BABY_LEFT_ARM, GRAF_BABY_LEFT_ARM, SHARAPOVA_BABY_LEFT_ARM };
 static const char *const (*const BABY_ARMS[PLAYER_COUNT])[BABY_H] = { AGASSI_BABY_ARM, NADAL_BABY_ARM, GRAF_BABY_ARM, SHARAPOVA_BABY_ARM };
 static PlayerTextures textures[PLAYER_COUNT], babies[PLAYER_COUNT];
+typedef struct {
+    SDL_Texture *body, *headless, *arm[FORCE_ARM_POSES];
+} ForceTextures;
+static const char *const *const FORCE_BODIES[FORCE_USERS] = { VADER_FORCE_BODY, LUKE_FORCE_BODY };
+static const char *const *const FORCE_HEADLESS[FORCE_USERS] = { VADER_FORCE_HEADLESS, LUKE_FORCE_HEADLESS };
+static const char *const (*const FORCE_ARMS[FORCE_USERS])[SPRITE_H] = { VADER_FORCE_ARM, LUKE_FORCE_ARM };
+static ForceTextures force_tex[FORCE_USERS];
+static int force_timer[2];              // Per side (0 = left player): frames left of the current Force wave
+static float force_x[2], force_y[2];    // Where the wave is aimed
 static SDL_Texture *rackets[PLAYER_COUNT];
 static bool sprites_ok;
 static SDL_Texture *iron_ball;
@@ -147,6 +170,13 @@ void init_player_sprites(SDL_Renderer *renderer) {
                                 BABY_LEFT_ARMS[i][0], BABY_ARMS[i][0], BABY_H);
         sprites_ok &= (rackets[i] = build_sized(renderer, RACKETS[i], RACKET_W, RACKET_H)) != NULL;
     }
+    for (int i = 0; i < FORCE_USERS; i++) {
+        ForceTextures *f = &force_tex[i];
+        sprites_ok &= (f->body = build_sized(renderer, FORCE_BODIES[i], SPRITE_W, SPRITE_H)) != NULL;
+        sprites_ok &= (f->headless = build_sized(renderer, FORCE_HEADLESS[i], SPRITE_W, SPRITE_H)) != NULL;
+        for (int a = 0; a < FORCE_ARM_POSES; a++)
+            sprites_ok &= (f->arm[a] = build_sized(renderer, FORCE_ARMS[i][a], SPRITE_W, SPRITE_H)) != NULL;
+    }
     iron_ball = build_iron_ball(renderer);
     if (!sprites_ok) printf("[pong] player sprites failed, drawing plain paddles: %s\n", SDL_GetError());
 }
@@ -173,6 +203,11 @@ void free_player_sprites(void) {
         destroy_set(&babies[i]);
         destroy(&rackets[i]);
     }
+    for (int i = 0; i < FORCE_USERS; i++) {
+        destroy(&force_tex[i].body);
+        destroy(&force_tex[i].headless);
+        for (int a = 0; a < FORCE_ARM_POSES; a++) destroy(&force_tex[i].arm[a]);
+    }
     destroy(&iron_ball);
     sprites_ok = false;
 }
@@ -180,6 +215,11 @@ void free_player_sprites(void) {
 // A shrunk player is drawn (and aimed at) as the baby
 static bool is_baby(const Paddle *p) {
     return p->effect == BONUS_SHRINK;
+}
+
+// A full-height paddle is drawn (and aimed at) as its force user
+static bool is_force_user(const Paddle *p) {
+    return p->effect == BONUS_FULL;
 }
 
 // Steps through stand / left foot up / stand / right foot up while moving
@@ -220,19 +260,24 @@ static void draw_shadow(SDL_Renderer *renderer, int cx, int cy, int rx) {
 
 // Where the sprite is drawn: stretched to the paddle height, front edge on the paddle's front
 static SDL_Rect sprite_rect(const Paddle *p, bool faces_right) {
-    int w = SPRITE_W * SPRITE_SCALE, front = FRONT_COL * SPRITE_SCALE;
+    bool force = is_force_user(p);
+    int scale = force ? FORCE_SCALE : SPRITE_SCALE, w = SPRITE_W * scale, front = FRONT_COL * scale;
     SDL_Rect dst = { faces_right ? (int)(p->x + p->w) - front : (int)p->x - (w - front), (int)p->y, w, (int)p->h };
+    if (force) {                    // Life size in the middle of the lane, not stretched over the whole height
+        dst.h = SPRITE_H * FORCE_SCALE;
+        dst.y = (SCREEN_HEIGHT - dst.h) / 2;
+    }
     return dst;
 }
 
-// Screen position of a sprite feature (POINTS, or BABY_POINTS while shrunk) for the paddle as currently drawn,
-// mirrored for the right player
+// Screen position of a sprite feature (POINTS, or BABY_POINTS while shrunk, FORCE_POINTS as a force user) for
+// the paddle as currently drawn, mirrored for the right player
 void player_point(const Paddle *p, bool faces_right, PlayerPoint point, int *x, int *y) {
     SDL_Rect dst = sprite_rect(p, faces_right);
-    bool baby = is_baby(p);
-    const float *pt = baby ? BABY_POINTS[point] : POINTS[point];
+    bool baby = is_baby(p), force = is_force_user(p);
+    const float *pt = force ? FORCE_POINTS[point] : baby ? BABY_POINTS[point] : POINTS[point];
     float col = faces_right ? pt[0] : SPRITE_W - pt[0];
-    *x = dst.x + (int)(col * SPRITE_SCALE);
+    *x = dst.x + (int)(col * (force ? FORCE_SCALE : SPRITE_SCALE));
     *y = dst.y + (int)(dst.h * pt[1] / (baby ? BABY_H : SPRITE_H));
 }
 
@@ -295,8 +340,49 @@ static void draw_cuff(SDL_Renderer *renderer, const Paddle *p, bool faces_right)
     SDL_RenderFillRect(renderer, &band);
 }
 
+// Full bonus: start a Force wave from the palm of the force user facing right (or left) to (x, y), the ball as
+// it's sent back; holds the push pose for FORCE_FRAMES
+void force_push(bool faces_right, float x, float y) {
+    int side = faces_right ? 0 : 1;
+    force_timer[side] = FORCE_FRAMES;
+    force_x[side] = x;
+    force_y[side] = y;
+}
+
+// A ring of 6 px blocks of radius `r` around (cx, cy), in the current draw colour
+static void draw_ring(SDL_Renderer *renderer, float cx, float cy, float r) {
+    int blocks = 12 + (int)(r / 4);
+    for (int i = 0; i < blocks; i++) {
+        float a = 2.0f * (float)M_PI * i / blocks;
+        SDL_Rect b = { (int)(cx + SDL_cosf(a) * r) / 6 * 6 - 3, (int)(cy + SDL_sinf(a) * r) / 6 * 6 - 3, 6, 6 };
+        SDL_RenderFillRect(renderer, &b);
+    }
+}
+
+// The Force wave, over the sprite: ripples running from the palm to the ball, and a ring spreading where it
+// met the ball, fading out; red for Vader, pale blue for Luke. Counts force_timer down.
+static void draw_force_wave(SDL_Renderer *renderer, const Paddle *p, bool faces_right) {
+    int side = faces_right ? 0 : 1;
+    if (force_timer[side] <= 0) return;
+    int age = FORCE_FRAMES - force_timer[side]--, hx, hy;
+    player_point(p, faces_right, POINT_HAND, &hx, &hy);
+    float fade = (float)(force_timer[side] + 1) / FORCE_FRAMES;
+    SDL_Color c = p->force_user == 0 ? (SDL_Color){ 255, 60, 50, 0 } : (SDL_Color){ 150, 205, 255, 0 };
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    for (int k = 0; k < FORCE_RIPPLES; k++) {
+        float t = SDL_fmodf((k + age * 0.25f) / FORCE_RIPPLES, 1.0f);
+        SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, (Uint8)(230 * fade * (1.0f - 0.5f * t)));
+        draw_ring(renderer, hx + (force_x[side] - hx) * t, hy + (force_y[side] - hy) * t, 8 + 26 * t);
+    }
+    SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, (Uint8)(255 * fade));
+    draw_ring(renderer, force_x[side], force_y[side], 14.0f + age * 4.0f);
+    draw_ring(renderer, force_x[side], force_y[side], 8.0f + age * 2.5f);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+}
+
 // Flashes blue while stunned; hidden, shadow included, while ghosted; sinks into the ground through a rift,
-// tinted purple and cut off at the feet line; a baby while shrunk; dragging a ball and chain while slowed
+// tinted purple and cut off at the feet line; a baby while shrunk; dragging a ball and chain while slowed;
+// Vader or Luke, pushing the Force, with the full-height bonus
 void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool faces_right) {
     float depth = vanish_depth(p);
     bool chained = p->effect == BONUS_SLOW && depth <= 0.0f && sprites_ok;
@@ -312,11 +398,24 @@ void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool 
         return;
     }
 
-    bool baby = is_baby(p);
-    const PlayerTextures *t = baby ? &babies[look] : &textures[look];
-    int left, right;
-    arm_poses(p, &left, &right);
-    SDL_Texture *stack[4] = { p->headless ? t->headless : t->body, t->legs[step_frame(p)], t->left_arm[left], t->arm[right] };
+    bool baby = is_baby(p), force = is_force_user(p);
+    SDL_Texture *stack[4];
+    int layers = 4;
+    if (force) {
+        const ForceTextures *f = &force_tex[p->force_user];
+        bool push = force_timer[faces_right ? 0 : 1] > 0 || p->swing_timer > 0 || p->throw_timer > 0;
+        stack[0] = p->headless ? f->headless : f->body;
+        stack[1] = f->arm[push];
+        layers = 2;
+    } else {
+        const PlayerTextures *t = baby ? &babies[look] : &textures[look];
+        int left, right;
+        arm_poses(p, &left, &right);
+        stack[0] = p->headless ? t->headless : t->body;
+        stack[1] = t->legs[step_frame(p)];
+        stack[2] = t->left_arm[left];
+        stack[3] = t->arm[right];
+    }
     SDL_Rect dst = sprite_rect(p, faces_right);
     int feet_x, ground;
     player_point(p, faces_right, POINT_FEET, &feet_x, &ground);
@@ -325,10 +424,10 @@ void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool 
         SDL_RenderSetClipRect(renderer, &above);
         dst.y += (int)(depth * dst.h);
     } else {
-        draw_shadow(renderer, feet_x + SHADOW_DX, ground, baby ? BABY_SHADOW_RX : SHADOW_RX);
+        draw_shadow(renderer, feet_x + SHADOW_DX, ground, baby ? BABY_SHADOW_RX : force ? SHADOW_RX * 3 / 2 : SHADOW_RX);
         if (chained) draw_ball_and_chain(renderer, p, faces_right, ground);
     }
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < layers; i++) {
         if (depth > 0.0f) SDL_SetTextureColorMod(stack[i], 200, 140, 255);
         else if (flash) SDL_SetTextureColorMod(stack[i], 90, 130, 255);
         else SDL_SetTextureColorMod(stack[i], 255, 255, 255);
@@ -336,6 +435,7 @@ void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool 
     }
     if (chained) draw_cuff(renderer, p, faces_right);
     if (depth > 0.0f) SDL_RenderSetClipRect(renderer, NULL);
+    if (force) draw_force_wave(renderer, p, faces_right);
 }
 
 // The player standing, unscaled art pixels `scale` screen pixels square, top-left at (x, y): for the character

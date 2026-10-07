@@ -1,5 +1,6 @@
 #include "ball.h"
 #include "audio.h"
+#include "players.h"
 #include <stdlib.h>
 
 #define GRUNT_CHANCE        25          // Percent of hits the player grunts on
@@ -34,12 +35,16 @@ void reset_ball(Ball *ball, int serve_direction) {
 }
 
 // Bounce off a paddle toward `direction` (1 = right, -1 = left), angled by where it struck; plays the hit,
-// and now and then (GRUNT_CHANCE) one of the grunts
+// and now and then (GRUNT_CHANCE) one of the grunts. A full-height paddle's force user (Vader or Luke) sends
+// it back with the Force instead: a Force wave and its sound.
 static void hit_by_paddle(Ball *ball, Paddle *p, int direction) {
     p->swing_timer = SWING_DURATION;
     paddle_hits++;
-    play_sound(&snd_paddle_hit);
-    if (rand() % 100 < GRUNT_CHANCE) play_sound(&snd_grunts[rand() % GRUNT_COUNT]);
+    bool force = p->effect == BONUS_FULL;
+    if (!force) {
+        play_sound(&snd_paddle_hit);
+        if (rand() % 100 < GRUNT_CHANCE) play_sound(&snd_grunts[rand() % GRUNT_COUNT]);
+    }
     float impact = ((ball->y + ball->size / 2.0f) - (p->y + p->h / 2.0f)) / (p->h / 2.0f);
     speed_up();
     ball->vx = direction * ball_base_speed() * speed_scale;
@@ -47,6 +52,10 @@ static void hit_by_paddle(Ball *ball, Paddle *p, int direction) {
     ball->x = direction > 0 ? p->x + p->w : p->x - ball->size;
     ball->zigzag = p->effect == BONUS_ZIGZAG;
     ball->zigzag_timer = ZIGZAG_MIN_FRAMES;
+    if (force) {
+        force_push(direction > 0, ball->x + ball->size / 2, ball->y + ball->size / 2);
+        play_sound(&snd_force);
+    }
 }
 
 // One frame of ball physics: zig-zag swings, movement, wall bounces and paddle hits (the paddles' vanish

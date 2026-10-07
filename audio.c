@@ -53,6 +53,8 @@ Sound snd_rift_snap;
 Sound snd_mole;
 Sound snd_thud;
 Sound snd_quake;
+Sound snd_saber;
+Sound snd_force;
 Sound snd_ribbit;
 Sound snd_tongue;
 Sound snd_spit;
@@ -253,14 +255,28 @@ static void synth_thud(void) {
     snd_thud.count = samples;
 }
 
+// Turn a float mix into `out`, scaled so its peak sits at `level` of full scale; frees `mix`. Leaves `out`
+// silent if the PCM buffer can't be allocated.
+static void store_normalized(float *mix, int samples, float level, Sound *out) {
+    Sint16 *pcm = SDL_malloc(samples * sizeof(Sint16));
+    if (pcm) {
+        float peak = 0.0f;
+        for (int i = 0; i < samples; i++) peak = SDL_max(peak, fabsf(mix[i]));
+        float gain = peak > 0.0f ? level / peak : 0.0f;
+        for (int i = 0; i < samples; i++) pcm[i] = (Sint16)(mix[i] * gain * 32767.0f);
+        out->samples = pcm;
+        out->count = samples;
+    }
+    SDL_free(mix);
+}
+
 // Tremor: a deep rolling rumble with the ground snapping (sparse low crunches) as it splits. Mixed in float,
 // then normalized and faded to silence so it neither clips nor clicks off at the end.
 static void synth_quake(void) {
     int samples = (int)(1.1f * AUDIO_RATE);
     float *mix = SDL_malloc(samples * sizeof(float));
-    Sint16 *pcm = SDL_malloc(samples * sizeof(Sint16));
-    if (!mix || !pcm) { SDL_free(mix); SDL_free(pcm); return; }
-    float phase = 0.0f, phase2 = 0.0f, low = 0.0f, low2 = 0.0f, crackle = 0.0f, crunch = 0.0f, peak = 0.0f;
+    if (!mix) return;
+    float phase = 0.0f, phase2 = 0.0f, low = 0.0f, low2 = 0.0f, crackle = 0.0f, crunch = 0.0f;
     for (int i = 0; i < samples; i++) {
         float t = (float)i / AUDIO_RATE;
         float wobble = sinf(2.0f * (float)M_PI * 1.7f * t);
@@ -277,13 +293,49 @@ static void synth_quake(void) {
         float tail = SDL_min((1.1f - t) / 0.3f, 1.0f);             // Fade the last 0.3 s to silence
         mix[i] = ((0.5f * sinf(2.0f * (float)M_PI * phase) + 0.35f * sinf(2.0f * (float)M_PI * phase2)
                    + 6.0f * low2) * env + 1.5f * crunch) * tail;
-        peak = SDL_max(peak, fabsf(mix[i]));
     }
-    float gain = peak > 0.0f ? 0.8f / peak : 0.0f;
-    for (int i = 0; i < samples; i++) pcm[i] = (Sint16)(mix[i] * gain * 32767.0f);
-    SDL_free(mix);
-    snd_quake.samples = pcm;
-    snd_quake.count = samples;
+    store_normalized(mix, samples, 0.8f, &snd_quake);
+}
+
+// Lightsaber igniting (Vader or Luke arriving): a hiss as it snaps on, then the hum, two detuned buzzy saws
+// sweeping up to ~110 Hz and wavering, softened by a low-pass and fading out
+static void synth_saber(void) {
+    int samples = (int)(1.0f * AUDIO_RATE);
+    float *mix = SDL_malloc(samples * sizeof(float));
+    if (!mix) return;
+    float phase = 0.0f, phase2 = 0.0f, soft = 0.0f, prev_n = 0.0f;
+    for (int i = 0; i < samples; i++) {
+        float t = (float)i / AUDIO_RATE;
+        float f = 60.0f + 50.0f * (1.0f - expf(-t * 16.0f)) + 2.0f * sinf(2.0f * (float)M_PI * 3.0f * t);
+        phase += f / AUDIO_RATE;
+        phase2 += f * 1.012f / AUDIO_RATE;
+        float buzz = 0.6f * (2.0f * (phase - floorf(phase)) - 1.0f) + 0.4f * (2.0f * (phase2 - floorf(phase2)) - 1.0f);
+        soft += 0.2f * (buzz - soft);
+        float n = rand01() * 2.0f - 1.0f, hiss = (n - prev_n) * expf(-t * 25.0f);
+        prev_n = n;
+        float env = SDL_min(t / 0.02f, 1.0f) * SDL_min((1.0f - t) / 0.35f, 1.0f);
+        mix[i] = (soft + 0.5f * hiss) * env;
+    }
+    store_normalized(mix, samples, 0.7f, &snd_saber);
+}
+
+// The Force pushing the ball back: a deep "whoom", a sine swelling from 50 to 140 Hz under rushing air whose
+// low-pass opens and closes with it
+static void synth_force(void) {
+    const float length = 0.5f;
+    int samples = (int)(length * AUDIO_RATE);
+    float *mix = SDL_malloc(samples * sizeof(float));
+    if (!mix) return;
+    float phase = 0.0f, air = 0.0f;
+    for (int i = 0; i < samples; i++) {
+        float t = (float)i / AUDIO_RATE, k = t / length;
+        float swell = sinf((float)M_PI * k);
+        phase += (50.0f + 90.0f * k) / AUDIO_RATE;
+        float n = rand01() * 2.0f - 1.0f;
+        air += (0.01f + 0.07f * swell) * (n - air);
+        mix[i] = (0.7f * sinf(2.0f * (float)M_PI * phase) + 2.5f * air) * swell * swell;
+    }
+    store_normalized(mix, samples, 0.8f, &snd_force);
 }
 
 // Croak: two buzzy "rib-bit" pulses, a rough sawtooth rolled at ~45 Hz, through a throaty resonance
@@ -449,6 +501,8 @@ void init_audio(void) {
     synth_mole();
     synth_thud();
     synth_quake();
+    synth_saber();
+    synth_force();
     synth_ribbit();
     synth_tongue();
     synth_spit();
@@ -490,6 +544,8 @@ void shutdown_audio(void) {
     SDL_free(snd_mole.samples);
     SDL_free(snd_thud.samples);
     SDL_free(snd_quake.samples);
+    SDL_free(snd_saber.samples);
+    SDL_free(snd_force.samples);
     SDL_free(snd_ribbit.samples);
     SDL_free(snd_tongue.samples);
     SDL_free(snd_spit.samples);

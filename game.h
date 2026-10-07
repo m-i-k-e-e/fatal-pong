@@ -48,6 +48,7 @@ typedef struct {
     bool unarmed;             // Threw the racket in a fatality
     bool headless;            // Lost the head to a fatality
     int vanish_timer;         // Fell through a rift: sinking, gone, then rising (see rift.h)
+    int force_user;           // Full bonus: who stands in, 0 Vader or 1 Luke (see players.c)
 } Paddle;
 
 typedef struct {

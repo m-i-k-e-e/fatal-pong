@@ -169,13 +169,13 @@ HEAD_ROWS = len(HEAD_MASK)
 SPHERE = dict(regions={'face', 'hair', 'band'}, ellipse=(HEAD_X + 12, 21, 12.5, 22))
 
 def head_mask(style):
-    """HEAD_MASK for a hairstyle: 'long' as drawn, 'bob' cut at the chin with straight bangs, 'pulled' back off
-    the face (into a ponytail, painted separately)."""
+    """HEAD_MASK for a hairstyle: 'long' as drawn, 'bob' cut at the chin with straight bangs, 'short' cut above
+    the jaw, 'pulled' back off the face (into a ponytail, painted separately)."""
     rows = []
     for y, half in enumerate(HEAD_MASK):
         if style == 'bob' and y <= 16:
             half = half.replace('f', 'h')
-        elif style == 'bob' and y >= 36 or style == 'pulled' and y >= 26:
+        elif style == 'bob' and y >= 36 or style == 'short' and y >= 32 or style == 'pulled' and y >= 26:
             half = half.replace('h', '.')
         rows.append(half)
     return rows
@@ -544,6 +544,112 @@ def baby_layers(p):
                 left=[baby_left_arm(f) for f in range(LEFT_FRAMES)],
                 arm=[baby_racket_arm(p, f) for f in range(ARM_FRAMES)])
 
+# --- Force users: Vader or Luke stands in for a player with the full-height bonus ------------------------
+# Same 32x80 canvas and Pop! head; they don't walk, so it's a body (legs, cape and the back arm holding a lit
+# lightsaber included), a headless body for fatalities, and the front arm idle or in the force push.
+
+FORCE_ARM_POSES = 2                     # Idle, push
+FORCE_HAND = (29, 46)                   # Open palm in the push pose (players.c FORCE_POINTS)
+
+FORCE_USERS = {
+    'VADER': dict(sleeve='black', hand='black', blade='red', legs='black', boots='black'),
+    'LUKE': dict(sleeve='white', hand='skin', blade='energy', legs='white', boots='brown'),
+}
+
+def vader_helmet(L):
+    """The Pop! head as a black helmet flaring out at the bottom: lenses, brow ridge, the triangular grille and
+    cheek vents."""
+    for y, half in enumerate(HEAD_MASK):
+        for x, c in enumerate(half + half[::-1]):
+            if c != '.':
+                L.paint(HEAD_X + x, y, 'helmet', 'black', -0.7)
+    for y in range(32, 43):                                     # Flared lower edge, over the shoulders
+        ext = (y - 31) // 3
+        for x in range(max(0, HEAD_X - ext), min(W, HEAD_X + 24 + ext)):
+            L.paint(x, y, 'helmet', 'black', -0.9)
+    for x in range(5, 21):
+        L.pixel(x, 20, '5')                                     # Brow ridge
+    for x0 in (5, 16):                                          # Lenses with a glint
+        for y, (a, b) in zip(range(21, 25), ((1, 4), (0, 5), (0, 5), (1, 4))):
+            for x in range(x0 + a, x0 + b):
+                L.pixel(x, y, 'K')
+        L.pixel(x0 + 1, 22, '6')
+    for y in range(25, 29):                                     # Nose ridge
+        L.pixel(12, y, '5'); L.pixel(13, y, '4')
+    for i, y in enumerate(range(29, 37)):                       # Grille, widening down, with dark slits
+        half = 1 + i // 2
+        for x in range(13 - half, 13 + half):
+            L.pixel(x, y, 'K' if (x + y) % 2 and i > 1 else 'O')
+    for y in range(30, 35):                                     # Cheek vents
+        L.pixel(7, y, '4'); L.pixel(18, y, '4')
+
+def force_body(name, f, headless=False):
+    L = Layer()
+    vader = name == 'VADER'
+    dark = -0.6 if vader else 0.0                               # Vader's black stays black
+    if vader:                                                   # Cape flaring out behind him to the floor
+        for y in range(42, 78):
+            ext = (y - 42) // 7
+            for x in range(5 - ext, 21 + ext):
+                L.paint(x, y, 'cape', 'black', -1.0)
+    for y in range(TORSO_TOP, TORSO_BOTTOM + 1):
+        for x in range(TORSO_LEFT, TORSO_RIGHT + 1):
+            L.paint(x, y, 'torso', f['sleeve'], (12.5 - x) / 14 - (0.6 if y < TORSO_TOP + 2 else 0) + dark)
+    for side, x0 in enumerate((9, 14)):                         # Legs and boots, standing still
+        L.rect(x0, TORSO_BOTTOM + 1, x0 + 2, 71, f'leg{side}', f['legs'], -0.3 + dark)
+        L.rect(x0 - (1 - side), 72, x0 + 2 + side, 76, f'boot{side}', f['boots'], 0.1 + dark)
+    # Back arm down to the hand holding the saber upright
+    limb(L, (7, 46), (5, 52), 'back_arm', f['sleeve'])
+    limb(L, (5, 52), (5, 56), 'back_arm', f['sleeve'])
+    if headless:
+        L.rect(HEAD_X + 10, 41, HEAD_X + 13, 44, 'neck', 'black' if vader else 'skin', -0.3)
+        L.rect(HEAD_X + 10, 40, HEAD_X + 13, 41, 'stump', 'blood', 0.4)
+        for x, depth in ((9, 3), (10, 6), (11, 2), (12, 8), (13, 4), (14, 5), (15, 2)):
+            L.rect(x, TORSO_TOP, x, TORSO_TOP + depth, 'gore', 'blood', -0.2)
+    elif vader:
+        vader_helmet(L)
+    else:
+        paint_head(L, 'honey', False, 'short')
+    L.rect(4, 54, 5, 61, 'hilt', 'grey', 0.2)                   # Saber: hilt, then the blade up past the head
+    L.rect(4, 24, 5, 53, 'blade', f['blade'], 1.2)
+    L.rect(4, 55, 6, 57, 'back_hand', f['hand'], 0.2)
+    rows_sphere = dict(regions={'face', 'hair', 'helmet'}, ellipse=SPHERE['ellipse'])
+    if not headless and not vader:
+        face(L, True, [(x, 'f') for x in range(5, 10)] + [(x, 'f') for x in range(16, 21)])
+    if not headless and vader:
+        # Chest panel and belt boxes
+        L.rect(10, 48, 15, 51, 'panel', 'grey', -0.2)
+        for x, y, c in ((11, 49, 'R'), (12, 49, 'G'), (13, 49, 'c'), (14, 49, 'R'), (11, 50, 'c'), (13, 50, 'R')):
+            L.pixel(x, y, c)
+    if vader:
+        for x in (9, 11, 14, 16):
+            L.pixel(x, 56, '*'); L.pixel(x, 57, 'O')
+    else:
+        for y in range(TORSO_TOP, TORSO_TOP + 9):               # Tunic wrap, then the belt and buckle
+            L.pixel(12 + (y - TORSO_TOP) // 2, y, 'w')
+        for x in range(TORSO_LEFT, TORSO_RIGHT + 1):
+            L.pixel(x, 56, 'H'); L.pixel(x, 57, 'h')
+        L.pixel(12, 56, '*'); L.pixel(13, 56, '*')
+    return L.render(rows_sphere)
+
+def force_arm(f, pose):
+    """Front arm: 0 idle at the side, 1 pushing the Force with the palm out."""
+    L = Layer()
+    if pose == 0:
+        limb(L, SHOULDER, (19, 52), 'arm', f['sleeve'])
+        limb(L, (19, 52), (19, 56), 'arm', f['sleeve'])
+        L.rect(18, 56, 19, 58, 'hand', f['hand'], 0.2)
+    else:
+        limb(L, SHOULDER, (23, 47), 'arm', f['sleeve'])
+        limb(L, (23, 47), (26, 46), 'arm', f['sleeve'])
+        hx, hy = FORCE_HAND
+        L.rect(hx - 1, hy - 3, hx, hy + 2, 'hand', f['hand'], 0.3)   # Palm out, fingers up
+    return L.render()
+
+def force_layers(name, f):
+    return dict(body=force_body(name, f), headless=force_body(name, f, headless=True),
+                arm=[force_arm(f, i) for i in range(FORCE_ARM_POSES)])
+
 # --- Players ---------------------------------------------------------------------------------------------
 
 PLAYERS = {
@@ -586,7 +692,7 @@ def c_array(name, rows, indent=""):
     lines = [f"{indent}{{  // {name}"] + [f'{indent}    "{r}",' for r in rows] + [f"{indent}}},"]
     return "\n".join(lines)
 
-def emit_inc(path, built):
+def emit_inc(path, built, force):
     out = ["// Generated by tools/gen_sprites.py; edit the generator, not this file.", "",
            "// One character per art pixel; '.' is transparent",
            "static SDL_Color palette_color(char c) {", "    switch (c) {"]
@@ -628,9 +734,18 @@ def emit_inc(path, built):
         out += [c_array("baby " + n, f, "    ") for n, f in zip(arm_names, b['arm'])]
         out.append("};")
         out.append("")
+    for name, l in force.items():
+        out.append(f"static const char *const {name}_FORCE_BODY[SPRITE_H] =")
+        out.append(c_array("force user body", l['body'])[:-1] + ";")
+        out.append(f"static const char *const {name}_FORCE_HEADLESS[SPRITE_H] =")
+        out.append(c_array("headless force user body", l['headless'])[:-1] + ";")
+        out.append(f"static const char *const {name}_FORCE_ARM[FORCE_ARM_POSES][SPRITE_H] = {{")
+        out += [c_array(n, a, "    ") for n, a in zip(["idle", "push"], l['arm'])]
+        out.append("};")
+        out.append("")
     open(path, "w").write("\n".join(out))
 
-def previews(built):
+def previews(built, force):
     from PIL import Image
     bg, scale, pad = (14, 14, 18), 8, 40
 
@@ -699,12 +814,25 @@ def previews(built):
         sheet.paste(im, (pad + (i % 5) * cw, pad + (i // 5) * ch))
     sheet.save("assets/babies.png")
 
+    # Force users: each idle, pushing, then headless
+    cells = []
+    for i, (name, l) in enumerate(force.items()):
+        cells += [compose([l['body'], l['arm'][0]], i % 2 == 1), compose([l['body'], l['arm'][1]], i % 2 == 1),
+                  compose([l['headless'], l['arm'][0]], i % 2 == 1)]
+    cw, ch = cells[0].width + pad, cells[0].height + pad
+    sheet = Image.new('RGB', (cw * 3 + pad, ch * len(force) + pad), bg)
+    for i, im in enumerate(cells):
+        sheet.paste(im, (pad + (i % 3) * cw, pad + (i // 3) * ch))
+    sheet.save("assets/force.png")
+
 if __name__ == "__main__":
     assert len(HEAD_MASK) == 44 and all(len(r) == 12 for r in HEAD_MASK)
     assert len(set(COLORS)) == len(COLORS) and not set(COLORS) & set('."\\')
     for outline, tones in MATERIALS.values():
         assert all(c in COLORS for c in tones + (outline or ''))
     built = {name: layers(p) for name, p in PLAYERS.items()}
-    emit_inc("player_sprites.inc", built)
-    previews(built)
-    print("wrote player_sprites.inc and assets/{agassi,nadal,players,agassi_frames,babies}.png, assets/players.gif")
+    force = {name: force_layers(name, f) for name, f in FORCE_USERS.items()}
+    emit_inc("player_sprites.inc", built, force)
+    previews(built, force)
+    print("wrote player_sprites.inc and assets/{agassi,nadal,players,agassi_frames,babies,force}.png, "
+          "assets/players.gif")
