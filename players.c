@@ -42,6 +42,8 @@
 #define FORCE_SCALE         3
 #define FORCE_FRAMES        24       // A Force wave's length, also how long the push pose holds
 #define FORCE_RIPPLES       5
+#define SHIVER_PX           2        // Scared: trembling this far either side,
+#define SHIVER_MS           40       // switching every this many milliseconds
 
 // Art coordinates of points the fatality and the rift aim at (see tools/gen_sprites.py)
 static const float POINTS[][2] = {
@@ -74,6 +76,7 @@ static const float BABY_POINTS[][2] = {
 
 typedef struct {
     SDL_Texture *body;
+    SDL_Texture *scared;                // White face, over the body (see draw_player)
     SDL_Texture *headless;
     SDL_Texture *legs[STEP_POSES];
     SDL_Texture *left_arm[LEFT_ARM_POSES];
@@ -82,6 +85,10 @@ typedef struct {
 
 static const char *const *const BODIES[PLAYER_COUNT] = { AGASSI_BODY, NADAL_BODY, GRAF_BODY, SHARAPOVA_BODY };
 static const char *const *const HEADLESS[PLAYER_COUNT] = { AGASSI_HEADLESS, NADAL_HEADLESS, GRAF_HEADLESS, SHARAPOVA_HEADLESS };
+static const char *const *const SCARED[PLAYER_COUNT] = { AGASSI_SCARED, NADAL_SCARED, GRAF_SCARED, SHARAPOVA_SCARED };
+static const char *const *const BABY_SCARED[PLAYER_COUNT] = {
+    AGASSI_BABY_SCARED, NADAL_BABY_SCARED, GRAF_BABY_SCARED, SHARAPOVA_BABY_SCARED,
+};
 static const char *const *const RACKETS[PLAYER_COUNT] = { AGASSI_RACKET, NADAL_RACKET, GRAF_RACKET, SHARAPOVA_RACKET };
 static const char *const (*const LEGS[PLAYER_COUNT])[SPRITE_H] = { AGASSI_LEGS, NADAL_LEGS, GRAF_LEGS, SHARAPOVA_LEGS };
 static const char *const (*const LEFT_ARMS[PLAYER_COUNT])[SPRITE_H] = { AGASSI_LEFT_ARM, NADAL_LEFT_ARM, GRAF_LEFT_ARM, SHARAPOVA_LEFT_ARM };
@@ -93,10 +100,11 @@ static const char *const (*const BABY_LEFT_ARMS[PLAYER_COUNT])[BABY_H] = { AGASS
 static const char *const (*const BABY_ARMS[PLAYER_COUNT])[BABY_H] = { AGASSI_BABY_ARM, NADAL_BABY_ARM, GRAF_BABY_ARM, SHARAPOVA_BABY_ARM };
 static PlayerTextures textures[PLAYER_COUNT], babies[PLAYER_COUNT];
 typedef struct {
-    SDL_Texture *body, *headless, *arm[FORCE_ARM_POSES];
+    SDL_Texture *body, *headless, *scared, *arm[FORCE_ARM_POSES];
 } ForceTextures;
 static const char *const *const FORCE_BODIES[FORCE_USERS] = { VADER_FORCE_BODY, LUKE_FORCE_BODY };
 static const char *const *const FORCE_HEADLESS[FORCE_USERS] = { VADER_FORCE_HEADLESS, LUKE_FORCE_HEADLESS };
+static const char *const *const FORCE_SCARED[FORCE_USERS] = { VADER_FORCE_SCARED, LUKE_FORCE_SCARED };
 static const char *const (*const FORCE_ARMS[FORCE_USERS])[SPRITE_H] = { VADER_FORCE_ARM, LUKE_FORCE_ARM };
 static ForceTextures force_tex[FORCE_USERS];
 static int force_timer[2];              // Per side (0 = left player): frames left of the current Force wave
@@ -172,12 +180,15 @@ void init_player_sprites(SDL_Renderer *renderer) {
                                 ARMS[i][0], SPRITE_H);
         sprites_ok &= build_set(renderer, &babies[i], BABY_BODIES[i], BABY_HEADLESS[i], BABY_LEGS[i][0],
                                 BABY_LEFT_ARMS[i][0], BABY_ARMS[i][0], BABY_H);
+        sprites_ok &= (textures[i].scared = build_sized(renderer, SCARED[i], SPRITE_W, SPRITE_H)) != NULL;
+        sprites_ok &= (babies[i].scared = build_sized(renderer, BABY_SCARED[i], SPRITE_W, BABY_H)) != NULL;
         sprites_ok &= (rackets[i] = build_sized(renderer, RACKETS[i], RACKET_W, RACKET_H)) != NULL;
     }
     for (int i = 0; i < FORCE_USERS; i++) {
         ForceTextures *f = &force_tex[i];
         sprites_ok &= (f->body = build_sized(renderer, FORCE_BODIES[i], SPRITE_W, SPRITE_H)) != NULL;
         sprites_ok &= (f->headless = build_sized(renderer, FORCE_HEADLESS[i], SPRITE_W, SPRITE_H)) != NULL;
+        sprites_ok &= (f->scared = build_sized(renderer, FORCE_SCARED[i], SPRITE_W, SPRITE_H)) != NULL;
         for (int a = 0; a < FORCE_ARM_POSES; a++)
             sprites_ok &= (f->arm[a] = build_sized(renderer, FORCE_ARMS[i][a], SPRITE_W, SPRITE_H)) != NULL;
     }
@@ -198,6 +209,7 @@ static void destroy(SDL_Texture **tex) {
 static void destroy_set(PlayerTextures *t) {
     destroy(&t->body);
     destroy(&t->headless);
+    destroy(&t->scared);
     for (int f = 0; f < STEP_POSES; f++) destroy(&t->legs[f]);
     for (int f = 0; f < LEFT_ARM_POSES; f++) destroy(&t->left_arm[f]);
     for (int f = 0; f < ARM_POSES; f++) destroy(&t->arm[f]);
@@ -213,6 +225,7 @@ void free_player_sprites(void) {
     for (int i = 0; i < FORCE_USERS; i++) {
         destroy(&force_tex[i].body);
         destroy(&force_tex[i].headless);
+        destroy(&force_tex[i].scared);
         for (int a = 0; a < FORCE_ARM_POSES; a++) destroy(&force_tex[i].arm[a]);
     }
     destroy(&iron_ball);
@@ -409,8 +422,9 @@ static void draw_force_wave(SDL_Renderer *renderer, const Paddle *p, bool faces_
 // Flashes blue while stunned; hidden, shadow included, while ghosted; sinks into the ground through a rift,
 // tinted purple and cut off at the feet line; a baby while shrunk; dragging a ball and chain while slowed;
 // Vader or Luke, pushing the Force, with the full-height bonus; cross-eyed with the zig-zag bonus; in a hat,
-// at normal size, with the grow bonus
-void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool faces_right) {
+// at normal size, with the grow bonus; white in the face, terrified and trembling when `scared` (level with an
+// invisible ghost)
+void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool faces_right, bool scared) {
     float depth = vanish_depth(p);
     bool chained = p->effect == BONUS_SLOW && depth <= 0.0f && sprites_ok;
     if (!chained) chain_on[faces_right ? 0 : 1] = false;
@@ -426,25 +440,28 @@ void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool 
     }
 
     bool baby = is_baby(p), force = is_force_user(p);
-    SDL_Texture *stack[5];
-    int layers = 4;
+    scared = scared && !p->headless;
+    SDL_Texture *stack[6];
+    int layers = 0;
     if (force) {
         const ForceTextures *f = &force_tex[p->force_user];
         bool push = force_timer[faces_right ? 0 : 1] > 0 || p->swing_timer > 0 || p->throw_timer > 0;
-        stack[0] = p->headless ? f->headless : f->body;
-        stack[1] = f->arm[push];
-        layers = 2;
+        stack[layers++] = p->headless ? f->headless : f->body;
+        if (scared) stack[layers++] = f->scared;
+        stack[layers++] = f->arm[push];
     } else {
         const PlayerTextures *t = baby ? &babies[look] : &textures[look];
         int left, right;
         arm_poses(p, &left, &right);
-        stack[0] = p->headless ? t->headless : t->body;
-        stack[1] = t->legs[step_frame(p)];
-        stack[2] = t->left_arm[left];
-        stack[3] = t->arm[right];
+        stack[layers++] = p->headless ? t->headless : t->body;
+        if (scared) stack[layers++] = t->scared;              // Over the face, under the arms and racket
+        stack[layers++] = t->legs[step_frame(p)];
+        stack[layers++] = t->left_arm[left];
+        stack[layers++] = t->arm[right];
         if (p->effect == BONUS_ZIGZAG && !p->headless) stack[layers++] = crossed_eyes;
     }
     SDL_Rect dst = sprite_rect(p, faces_right);
+    if (scared) dst.x += (SDL_GetTicks() / SHIVER_MS) % 2 ? SHIVER_PX : -SHIVER_PX;   // Trembling
     int feet_x, ground;
     player_point(p, faces_right, POINT_FEET, &feet_x, &ground);
     if (depth > 0.0f) {

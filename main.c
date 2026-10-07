@@ -43,6 +43,12 @@ static int read_choice(SDL_GameController *pad, bool right_stick) {
     return x < -16000 ? -1 : x > 16000 ? 1 : 0;
 }
 
+// True while `p` is level with an invisible (ghost bonus) opponent: their vertical spans overlap, so it's
+// staring the ghost in the face
+static bool scared_of_ghost(const Paddle *p, const Paddle *ghost) {
+    return ghost->effect == BONUS_GHOST && p->y < ghost->y + ghost->h && ghost->y < p->y + p->h;
+}
+
 // Fill the first free player slot. SDL also sends an "added" event for controllers already opened
 // at startup, and reopening one returns the same handle, so skip it or one pad would drive both players.
 static void open_pad(int device_index, SDL_GameController **pad1, SDL_GameController **pad2) {
@@ -303,8 +309,8 @@ int main(int argc, char *argv[]) {
         draw_calamity_ground(renderer);
         draw_rifts(renderer);
         draw_particles(renderer);
-        draw_player(renderer, &p1, looks[0], true);
-        draw_player(renderer, &p2, looks[1], false);
+        draw_player(renderer, &p1, looks[0], true, scared_of_ghost(&p1, &p2));
+        draw_player(renderer, &p2, looks[1], false, scared_of_ghost(&p2, &p1));
         draw_fireballs(renderer);
         draw_ball(renderer, &ball);
         draw_calamity_sky(renderer);

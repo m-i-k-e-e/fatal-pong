@@ -9,7 +9,7 @@ typedef enum { PLAYER_AGASSI, PLAYER_NADAL, PLAYER_GRAF, PLAYER_SHARAPOVA, PLAYE
 
 void init_player_sprites(SDL_Renderer *renderer);
 void free_player_sprites(void);
-void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool faces_right);
+void draw_player(SDL_Renderer *renderer, const Paddle *p, PlayerLook look, bool faces_right, bool scared);
 void force_push(bool faces_right, float x, float y);  // Full bonus: the force user's wave to (x, y)
 void draw_player_portrait(SDL_Renderer *renderer, PlayerLook look, int x, int y, int scale, bool faces_right);
 const char *player_name(PlayerLook look);

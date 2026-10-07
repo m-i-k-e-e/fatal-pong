@@ -580,6 +580,43 @@ def lady_hat():
     L.rect(0, HAT_BRIM, 27, HAT_BRIM + 2, 'brim', 'pink', 0.1)            # Wide brim
     return L.render()
 
+# --- Scared: white face overlay, drawn while the player is level with an invisible (ghost) opponent --------
+# The head's skin pixels from a body layer, recoloured in the white material's tones, then a terrified look:
+# wide eyes with tiny pupils, brows arched up (the usual ones covered), and an open "O" mouth. Babies keep their
+# pacifier. Hair and lashes stay as they are (left transparent).
+
+SKIN_TO_WHITE = {'e': '#', 'd': 'w', 's': 'W', 'S': '@', 'a': '~'}
+
+def scared(body_rows, head_rows, baby=False):
+    rows = [[SKIN_TO_WHITE.get(c, '.') if y < head_rows else '.' for c in row] for y, row in enumerate(body_rows)]
+
+    def put(x, y, c):
+        rows[y][x] = c
+
+    if baby:
+        for x0 in (6, 14):                          # Big round eyes
+            for dy, line in enumerate(("eKKe", "KEEK", "KkkK", "eKKe")):
+                for i, c in enumerate(line):
+                    put(x0 + i, 9 + dy, c)
+        return [''.join(r) for r in rows]
+    for x0, x1 in ((5, 9), (16, 20)):
+        brow = body_rows[20][x0 + 2]                # The player's brow colour
+        for x in range(x0, x1 + 1):                 # Cover the usual brows, arch new ones higher up
+            put(x, 19, '@'); put(x, 20, '@')
+            put(x, 17 if x0 < x < x1 else 18, brow)
+        for dy, line in enumerate(("eKKKe", "KEEEK", "KEkEK", "eKKKe")):    # Ringed, so they read on white
+            for i, c in enumerate(line):
+                put(x0 + i, 21 + dy, c)
+    for x in range(9, 17):                          # Mouth wiped, then a small open "O"
+        for y in range(32, 36):
+            put(x, y, '@')
+    for x, y, c in ((11, 32, 'e'), (12, 32, 'e'), (13, 32, 'e'), (14, 32, 'e'),
+                    (10, 33, 'e'), (11, 33, 'K'), (12, 33, 'K'), (13, 33, 'K'), (14, 33, 'K'), (15, 33, 'e'),
+                    (10, 34, 'e'), (11, 34, 'K'), (12, 34, 'r'), (13, 34, 'r'), (14, 34, 'K'), (15, 34, 'e'),
+                    (11, 35, 'e'), (12, 35, 'e'), (13, 35, 'e'), (14, 35, 'e')):
+        put(x, y, c)
+    return [''.join(r) for r in rows]
+
 # --- Crossed eyes: overlay drawn on the face while a player has the zig-zag bonus ------------------------
 # Only the eyes: bulging whites with the pupils in the inner corners. Every player shares the eye layout; no baby
 # version, as a shrunk player can't have the zig-zag bonus at the same time.
@@ -765,11 +802,15 @@ def emit_inc(path, built, force):
         out.append(f"static const char *const {name}_ARM[ARM_POSES][SPRITE_H] = {{")
         out += [c_array(n, f, "    ") for n, f in zip(arm_names, l['arm'])]
         out.append("};")
+        out.append(f"static const char *const {name}_SCARED[SPRITE_H] =")
+        out.append(c_array("scared face", scared(l['body'], HEAD_ROWS))[:-1] + ";")
         out.append(f"static const char *const {name}_RACKET[RACKET_H] =")
         out.append(c_array("thrown racket", l['racket'])[:-1] + ";")
         b = l['baby']
         out.append(f"static const char *const {name}_BABY_BODY[BABY_H] =")
         out.append(c_array("baby body", b['body'])[:-1] + ";")
+        out.append(f"static const char *const {name}_BABY_SCARED[BABY_H] =")
+        out.append(c_array("scared baby face", scared(b['body'], BABY_TORSO[0], baby=True))[:-1] + ";")
         out.append(f"static const char *const {name}_BABY_HEADLESS[BABY_H] =")
         out.append(c_array("headless baby body", b['headless'])[:-1] + ";")
         out.append(f"static const char *const {name}_BABY_LEGS[STEP_POSES][BABY_H] = {{")
@@ -794,6 +835,9 @@ def emit_inc(path, built, force):
     for name, l in force.items():
         out.append(f"static const char *const {name}_FORCE_BODY[SPRITE_H] =")
         out.append(c_array("force user body", l['body'])[:-1] + ";")
+        out.append(f"static const char *const {name}_FORCE_SCARED[SPRITE_H] =")
+        out.append(c_array("scared face (none under a helmet)", scared(l['body'], HEAD_ROWS) if name != 'VADER'
+                           else ['.' * W] * H)[:-1] + ";")
         out.append(f"static const char *const {name}_FORCE_HEADLESS[SPRITE_H] =")
         out.append(c_array("headless force user body", l['headless'])[:-1] + ";")
         out.append(f"static const char *const {name}_FORCE_ARM[FORCE_ARM_POSES][SPRITE_H] = {{")
@@ -832,6 +876,8 @@ def previews(built, force):
     for name in built:
         compose(stack(name)).save(f"assets/{name.lower()}.png")
     lineup([stack(name) + [crossed_eyes()] for name in built]).save("assets/crossed_eyes.png")
+    lineup([stack(name)[:1] + [scared(built[name]['body'], HEAD_ROWS)] + stack(name)[1:] for name in built]
+           ).save("assets/scared.png")
 
     # Each player with their hat, the way it sits in game: body layers padded on top, the hat at the bottom
     def hatted(name, mirror):
@@ -904,5 +950,5 @@ if __name__ == "__main__":
     force = {name: force_layers(name, f) for name, f in FORCE_USERS.items()}
     emit_inc("player_sprites.inc", built, force)
     previews(built, force)
-    print("wrote player_sprites.inc and assets/{agassi,nadal,players,agassi_frames,babies,force,crossed_eyes,hats}.png, "
+    print("wrote player_sprites.inc and assets/{agassi,nadal,players,agassi_frames,babies,force,crossed_eyes,hats,scared}.png, "
           "assets/players.gif")

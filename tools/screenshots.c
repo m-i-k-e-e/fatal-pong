@@ -43,8 +43,8 @@ static void draw_scene(const Paddle *p1, const Paddle *p2, const Ball *ball) {
     draw_calamity_ground(renderer);
     draw_rifts(renderer);
     draw_particles(renderer);
-    draw_player(renderer, p1, PLAYER_AGASSI, true);
-    draw_player(renderer, p2, PLAYER_NADAL, false);
+    draw_player(renderer, p1, PLAYER_AGASSI, true, false);
+    draw_player(renderer, p2, PLAYER_NADAL, false, false);
     draw_fireballs(renderer);
     draw_ball(renderer, ball);
     draw_calamity_sky(renderer);
