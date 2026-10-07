@@ -13,18 +13,13 @@ typedef struct {
 static Bonus bonuses[MAX_BONUSES];
 static int spawn_timer = BONUS_SPAWN_MIN;
 
-// 5x5 icons drawn inside the bonus box, indexed by BonusType
-static const unsigned char BONUS_ICONS[BONUS_COUNT][5] = {
-    {0x00, 0x00, 0x00, 0x00, 0x00}, // none
-    {0x04, 0x04, 0x1F, 0x04, 0x04}, // grow: +
-    {0x00, 0x00, 0x1F, 0x00, 0x00}, // shrink: -
-    {0x1F, 0x11, 0x11, 0x11, 0x1F}, // ghost: hollow box
-    {0x0E, 0x0E, 0x0E, 0x0E, 0x0E}, // full: solid column
-    {0x14, 0x0A, 0x05, 0x0A, 0x14}, // fast: >>
-    {0x1F, 0x0E, 0x04, 0x0E, 0x1F}, // slow: hourglass
-    {0x08, 0x1C, 0x0A, 0x07, 0x02}, // invert: up/down arrows
-    {0x06, 0x0C, 0x1F, 0x06, 0x0C}, // zigzag: lightning bolt
-};
+// Pixel-art icons in the players' style, generated with their palette by tools/gen_bonus_icons.py; the art
+// array starts at BONUS_GROW (BonusType order, without BONUS_NONE)
+#include "bonus_icons.inc"
+#define ICON_FIELD_SCALE    3           // 48 px, filling the inside of the 56 px tile
+#define ICON_HUD_SCALE      2           // Under the scores
+
+static SDL_Texture *icon_tex[BONUS_COUNT];
 
 // Names and one-line explanations shown on the pause screen, indexed by BonusType
 static const char *const BONUS_NAMES[BONUS_COUNT] = {
@@ -133,15 +128,37 @@ void update_bonuses(Paddle *p1, Paddle *p2) {
 }
 
 // A bonus's 5x5 icon in the current draw color, each icon pixel `pixel_size` screen pixels wide
-static void draw_icon(SDL_Renderer *renderer, BonusType t, int x, int y, int pixel_size) {
-    for (int r = 0; r < 5; r++) {
-        for (int c = 0; c < 5; c++) {
-            if ((BONUS_ICONS[t][r] >> (4 - c)) & 1) {
-                SDL_Rect rect = { x + c * pixel_size, y + r * pixel_size, pixel_size, pixel_size };
-                SDL_RenderFillRect(renderer, &rect);
+// Build the icon textures from their character art (once, at startup); a missing one just isn't drawn
+void init_bonus_icons(SDL_Renderer *renderer) {
+    for (int t = 1; t < BONUS_COUNT; t++) {
+        SDL_Surface *surf = SDL_CreateRGBSurfaceWithFormat(0, BONUS_ICON_SIZE, BONUS_ICON_SIZE, 32, SDL_PIXELFORMAT_ARGB8888);
+        if (!surf) continue;
+        for (int y = 0; y < BONUS_ICON_SIZE; y++) {
+            Uint32 *row = (Uint32 *)((Uint8 *)surf->pixels + y * surf->pitch);
+            for (int x = 0; x < BONUS_ICON_SIZE; x++) {
+                SDL_Color c = bonus_icon_color(BONUS_ICON_ART[t - 1][y][x]);
+                row[x] = SDL_MapRGBA(surf->format, c.r, c.g, c.b, c.a);
             }
         }
+        icon_tex[t] = SDL_CreateTextureFromSurface(renderer, surf);
+        SDL_FreeSurface(surf);
+        if (icon_tex[t]) SDL_SetTextureBlendMode(icon_tex[t], SDL_BLENDMODE_BLEND);
     }
+}
+
+// Destroy the textures made by init_bonus_icons()
+void free_bonus_icons(void) {
+    for (int t = 0; t < BONUS_COUNT; t++) {
+        if (icon_tex[t]) SDL_DestroyTexture(icon_tex[t]);
+        icon_tex[t] = NULL;
+    }
+}
+
+// A bonus's icon with its top-left at (x, y), `scale` screen pixels per art pixel
+static void draw_icon(SDL_Renderer *renderer, BonusType t, int x, int y, int scale) {
+    if (!icon_tex[t]) return;
+    SDL_Rect dst = { x, y, BONUS_ICON_SIZE * scale, BONUS_ICON_SIZE * scale };
+    SDL_RenderCopy(renderer, icon_tex[t], NULL, &dst);
 }
 
 // Set the draw color for a bonus: green for good ones, red for bad ones
@@ -161,23 +178,33 @@ void draw_bonuses(SDL_Renderer *renderer) {
     }
 }
 
-// Colored frame (green good, red bad) with the white icon inside
+// Tile with a bevelled frame (green good, red bad: lighter on the top and left edges, darker on the others),
+// a slate inside light enough for the icon's dark outline to read, and the icon filling it
 void draw_bonus_box(SDL_Renderer *renderer, BonusType t, int x, int y) {
     SDL_Rect box = { x, y, BONUS_SIZE, BONUS_SIZE };
     set_bonus_color(renderer, t);
     SDL_RenderFillRect(renderer, &box);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 90);
+    SDL_Rect top = { x, y, BONUS_SIZE, 2 }, left = { x, y, 2, BONUS_SIZE };
+    SDL_RenderFillRect(renderer, &top);
+    SDL_RenderFillRect(renderer, &left);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 90);
+    SDL_Rect bottom = { x, y + BONUS_SIZE - 2, BONUS_SIZE, 2 }, right = { x + BONUS_SIZE - 2, y, 2, BONUS_SIZE };
+    SDL_RenderFillRect(renderer, &bottom);
+    SDL_RenderFillRect(renderer, &right);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     SDL_Rect inner = { x + 4, y + 4, BONUS_SIZE - 8, BONUS_SIZE - 8 };
-    SDL_SetRenderDrawColor(renderer, 24, 24, 30, 255);
+    SDL_SetRenderDrawColor(renderer, 52, 56, 72, 255);
     SDL_RenderFillRect(renderer, &inner);
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    draw_icon(renderer, t, x + 8, y + 8, 8);
+    draw_icon(renderer, t, x + 4, y + 4, ICON_FIELD_SCALE);
 }
 
 // Active effect icon and a shrinking time bar under the paddle's score
 void draw_effect_indicator(SDL_Renderer *renderer, const Paddle *p, int x, int y) {
     if (p->effect == BONUS_NONE) return;
+    draw_icon(renderer, p->effect, x, y, ICON_HUD_SCALE);
     set_bonus_color(renderer, p->effect);
-    draw_icon(renderer, p->effect, x, y, 5);
-    SDL_Rect bar = { x + 35, y + 8, 100 * p->effect_timer / BONUS_DURATION, 10 };
+    SDL_Rect bar = { x + BONUS_ICON_SIZE * ICON_HUD_SCALE + 8, y + 11, 100 * p->effect_timer / BONUS_DURATION, 10 };
     SDL_RenderFillRect(renderer, &bar);
 }

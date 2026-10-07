@@ -1,8 +1,8 @@
 // Renders promo screenshots with the real game code on the host, off-screen, as BMP frames in
-// target/frames: the start screen, the win screen, a hadouken, a rift, the mole, the earthquake, the frog rain, a fatality and
-// a whole match ending. `make screenshots` builds and runs it, then turns the frames into assets/screenshots/:
-// start, win, mole, earthquake, frog-rain and finale .png, and hadouken, rift, mole, earthquake, frog-rain, win,
-// fatality and finale .gif.
+// target/frames: the start screen, the pause screen, the win screen, a hadouken, a rift, the mole, the
+// earthquake, the frog rain, a fatality and a whole match ending. `make screenshots` builds and runs it, then
+// turns the frames into assets/screenshots/: start, pause, win, mole, earthquake, frog-rain and finale .png, and
+// hadouken, rift, mole, earthquake, frog-rain, win, fatality and finale .gif.
 #include "SDL2/SDL.h"
 #include <stdio.h>
 #include "game.h"
@@ -12,6 +12,7 @@
 #include "hud.h"
 #include "paddle.h"
 #include "particles.h"
+#include "pause.h"
 #include "players.h"
 #include "rift.h"
 #include "fireball.c"       // Pulled in whole for its file-static throw_fireball(): the real throw needs a controller
@@ -125,6 +126,7 @@ int main(void) {
     init_player_sprites(renderer);
     init_court(renderer);
     init_calamities(renderer);
+    init_bonus_icons(renderer);
 
     // Start screen
     Paddle p1 = make_paddle(PADDLE_MARGIN), p2 = make_paddle(SCREEN_WIDTH - PADDLE_MARGIN - PADDLE_WIDTH);
@@ -133,6 +135,17 @@ int main(void) {
     draw_scene(&p1, &p2, &ball);
     draw_start_screen(renderer, 3000);                   // Late enough for the title drips to have run
     save("target/frames/start.bmp");
+
+    // Pause: the help panel over a match in progress, Agassi holding a bonus
+    p1.score = 4; p2.score = 3;
+    p1.y = 300; p2.y = 600;
+    p1.effect = BONUS_ZIGZAG; p1.effect_timer = BONUS_DURATION * 2 / 3;
+    ball.x = 1240; ball.y = 420;
+    draw_scene(&p1, &p2, &ball);
+    draw_pause_menu(renderer);
+    save("target/frames/pause.bmp");
+    p1 = make_paddle(PADDLE_MARGIN);
+    p2 = make_paddle(SCREEN_WIDTH - PADDLE_MARGIN - PADDLE_WIDTH);
 
     // Hadouken: Agassi charges, throws, the fireball crosses while the rally goes on and freezes Nadal
     p1.score = 4; p2.score = 3;
@@ -289,6 +302,7 @@ int main(void) {
 
     free_player_sprites();
     free_calamities();
+    free_bonus_icons();
     free_court();
     return 0;
 }

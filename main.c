@@ -89,6 +89,7 @@ int main(int argc, char *argv[]) {
     init_player_sprites(renderer);
     init_court(renderer);
     init_calamities(renderer);
+    init_bonus_icons(renderer);
 
     printf("[pong] video ok, %d joystick(s), pad1=%p pad2=%p\n", SDL_NumJoysticks(), (void *)pad1, (void *)pad2);
 
@@ -307,6 +308,7 @@ int main(int argc, char *argv[]) {
     shutdown_audio();
     free_player_sprites();
     free_calamities();
+    free_bonus_icons();
     free_court();
     if (pad1) SDL_GameControllerClose(pad1);
     if (pad2) SDL_GameControllerClose(pad2);

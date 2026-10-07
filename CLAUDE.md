@@ -12,7 +12,7 @@ Everything builds inside the `ps5` toolbox (Ubuntu 24.04), which has the PS5 pay
 ```sh
 toolbox run -c ps5 make               # target/install/eboot.elf + sce_sys/icon0.png
 toolbox run -c ps5 make dist          # target/dist/fatal-pong-$(VERSION).zip and .elf (VERSION ?= 1.0.0)
-toolbox run -c ps5 make screenshots   # assets/screenshots/: {start,win,mole,earthquake,frog-rain,finale}.png and a GIF per scene
+toolbox run -c ps5 make screenshots   # assets/screenshots/: {start,pause,win,mole,earthquake,frog-rain,finale}.png and a GIF per scene
 toolbox run -c ps5 make install       # FTP upload to /data/homebrew/fatal-pong (PS5_HOST, ftpsrv on 2121)
 toolbox run -c ps5 make test          # send the bare ELF to elfldr (port 9021)
 toolbox run -c ps5 make clean         # rm -rf target/
@@ -35,7 +35,7 @@ through `bash -c '...'`.
 | `rift.c` | Rift under the opponent: half-second warning, then a caught player sinks, is gone (`vanish_timer`, ball passes), and rises back |
 | `fatality.c` | End-of-match fatality: thrown racket, head explosion, blood particles with gravity, stains, shake |
 | `calamity.c` | Calamities rolled every 10th paddle hit (`paddle_hits` in ball.c): the mole (molehills), the earthquake (tremors that shake the screen and open cracks) or the frog rain (frogs landing in the way that swallow the ball, also with their tongue from a distance, and spit it out half a second later via `Ball.held` / `hidden`, plus decorative rain drawn in a sky layer over the players); shared obstacle timeline, ball knocks, the mud / rock / slime titles |
-| `bonus.c` | Bonus spawning, pickup, paddle effects, icons, names/descriptions |
+| `bonus.c` | Bonus spawning, pickup, paddle effects, tiles and icons (textures from `bonus_icons.inc`), names/descriptions |
 | `players.c` | Player sprites: builds textures from `player_sprites.inc`, picks poses, ground shadow |
 | `hud.c` | Grass court texture, scores, dripping blood, mud, rock and slime lettering, start, finish-him, fatality and win screens |
 | `pause.c` | Options help overlay (move list, bonus legend) |
@@ -44,6 +44,7 @@ through `bash -c '...'`.
 | `particles.c` | Fire trails and explosions |
 | `audio.c` | Embedded WAV clips, synthesized hadouken fallback, splat, rift, mole, quake, croak, tongue and spit sounds, software mixer |
 | `tools/gen_sprites.py` | Generates `player_sprites.inc` (sprites + palette) and the `assets/` previews |
+| `tools/gen_bonus_icons.py` | Generates `bonus_icons.inc` (the eight 16x16 bonus icons + palette, in `BonusType` order) and `assets/bonus_icons.png` |
 | `tools/gen_voice.sh` | Generates the announcer clips (`agassi-wins`, `nadal-wins`, `finish-him`, `fatality` .mp3) with Piper TTS + ffmpeg; pass clip names to regenerate only those |
 | `tools/gen_icon.py` | Generates the launcher icon `assets/icon0.png` (bloody "FATAL" over "PONG"); run from the project root (needs Pillow) |
 | `tools/screenshots.c` | Off-screen promo renders, driven by `make screenshots` |
@@ -72,8 +73,10 @@ the build uses the SDK's SDL2 headers.
 
 ## Sprites
 
-- Never edit `player_sprites.inc` by hand: change `tools/gen_sprites.py` and run `python3 tools/gen_sprites.py`
-  from the project root (needs Pillow). It rewrites the `.inc` and the previews in `assets/`.
+- Never edit `player_sprites.inc` or `bonus_icons.inc` by hand: change `tools/gen_sprites.py` /
+  `tools/gen_bonus_icons.py` and run it from the project root (needs Pillow). Each rewrites its `.inc` and its
+  previews in `assets/`. The bonus icons follow the players' style: material ramps lit from the upper left, a dark
+  outline; keep their order in sync with `BonusType` and the good/bad split with `bonus_is_good()`.
 - Each player is four stacked 32x80 layers (body, legs, left arm, racket arm), drawn 2x wide and stretched
   to the paddle height. Art faces right; the right-hand player is mirrored. The paddle's collision rect stays
   24 px wide, its front edge on art column `FRONT_COL` (players.c).

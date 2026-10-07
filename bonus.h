@@ -12,6 +12,8 @@
 #define BONUS_SPAWN_MAX     (10 * 60)
 #define MAX_BONUSES         2
 
+void init_bonus_icons(SDL_Renderer *renderer);
+void free_bonus_icons(void);
 void reset_bonuses(void);
 void clear_paddle_effect(Paddle *p);
 void update_paddle_effect(Paddle *p);

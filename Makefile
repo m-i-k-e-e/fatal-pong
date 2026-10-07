@@ -36,6 +36,7 @@ $(BUILD_DIR)/%.o: %.c $(wildcard *.h) | $(BUILD_DIR)
 
 $(BUILD_DIR)/audio.o: $(SOUNDS)
 $(BUILD_DIR)/players.o: player_sprites.inc
+$(BUILD_DIR)/bonus.o: bonus_icons.inc
 
 $(ICON): assets/icon0.png
 	mkdir -p $(@D)
@@ -76,16 +77,16 @@ dist: all assets/README.txt
 	rm -rf $(DIST_DIR)/$(APP_NAME)
 	@ls -l $(DIST_DIR)
 
-# Promo screenshots (assets/screenshots/start, win, mole, earthquake, frog-rain, finale .png and hadouken, rift, mole,
+# Promo screenshots (assets/screenshots/start, pause, win, mole, earthquake, frog-rain, finale .png and hadouken, rift, mole,
 # earthquake, frog-rain, win, fatality, finale .gif), rendered by tools/screenshots.c
 # with the real game code, built for this machine: needs a native compiler, SDL2 dev files and ffmpeg
 HOST_CC      ?= cc
 HOST_SDL      = $(shell pkg-config --cflags --libs sdl2)
 SHOT_DIR     := assets/screenshots
 FRAMES_DIR   := $(BUILD_DIR)/frames
-SHOT_SRCS    := tools/screenshots.c audio.c ball.c bonus.c draw.c fatality.c hud.c paddle.c particles.c players.c rift.c text.c
+SHOT_SRCS    := tools/screenshots.c audio.c ball.c bonus.c draw.c fatality.c hud.c paddle.c particles.c pause.c players.c rift.c text.c
 
-$(BUILD_DIR)/screenshots: $(SHOT_SRCS) fireball.c calamity.c player_sprites.inc $(wildcard *.h) $(SOUNDS) | $(BUILD_DIR)
+$(BUILD_DIR)/screenshots: $(SHOT_SRCS) fireball.c calamity.c player_sprites.inc bonus_icons.inc $(wildcard *.h) $(SOUNDS) | $(BUILD_DIR)
 	$(HOST_CC) -O2 -Wall -I. -DEMBED_DIR=\"$(CURDIR)/$(BUILD_DIR)/\" $(SHOT_SRCS) -o $@ $(HOST_SDL) -lm
 
 screenshots: $(BUILD_DIR)/screenshots
@@ -93,6 +94,7 @@ screenshots: $(BUILD_DIR)/screenshots
 	mkdir -p $(FRAMES_DIR) $(SHOT_DIR)
 	$(BUILD_DIR)/screenshots
 	ffmpeg -y -loglevel error -i $(FRAMES_DIR)/start.bmp $(SHOT_DIR)/start.png
+	ffmpeg -y -loglevel error -i $(FRAMES_DIR)/pause.bmp $(SHOT_DIR)/pause.png
 	ffmpeg -y -loglevel error -i $(FRAMES_DIR)/win.bmp $(SHOT_DIR)/win.png
 	ffmpeg -y -loglevel error -i $(FRAMES_DIR)/finale.bmp $(SHOT_DIR)/finale.png
 	ffmpeg -y -loglevel error -i $(FRAMES_DIR)/mole.bmp $(SHOT_DIR)/mole.png
