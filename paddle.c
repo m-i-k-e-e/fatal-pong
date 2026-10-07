@@ -27,8 +27,9 @@ void set_paddle_height(Paddle *p, float h) {
     clamp_to_screen(p);
 }
 
-// Move for an input direction in [-1, 1]; stunned paddles tick down their stun and stay put, and so do
-// paddles gone through a rift (rift.c counts that down)
+// Move for an input direction in [-1, 1] at PADDLE_SPEED, scaled like the ball by the start speed setting and
+// the rally speed-up; stunned paddles tick down their stun and stay put, and so do paddles gone through a rift
+// (rift.c counts that down)
 void move_paddle(Paddle *p, float dir) {
     if (p->swing_timer > 0) p->swing_timer--;
     if (p->throw_timer > 0) p->throw_timer--;
@@ -36,7 +37,7 @@ void move_paddle(Paddle *p, float dir) {
     if (p->vanish_timer > 0) return;
     if (p->stun_timer > 0) { p->stun_timer--; return; }
 
-    float speed = PADDLE_SPEED * speed_scale;
+    float speed = PADDLE_SPEED * start_speed_percent / 100.0f * speed_scale;
     if (p->effect == BONUS_FAST) speed *= 1.8f;
     else if (p->effect == BONUS_SLOW) speed *= 0.5f;
     if (p->effect == BONUS_INVERT) dir = -dir;

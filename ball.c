@@ -6,11 +6,11 @@
 
 float speed_scale = 1.0f;
 int paddle_hits = 0;
-int ball_speed_percent = 100;
+int start_speed_percent = 100;
 
 // INITIAL_BALL_SPEED scaled by the pause menu's ball speed setting
 float ball_base_speed(void) {
-    return INITIAL_BALL_SPEED * ball_speed_percent / 100.0f;
+    return INITIAL_BALL_SPEED * start_speed_percent / 100.0f;
 }
 
 // Every ball hit speeds up both the ball and the paddles, up to MAX_SPEED_SCALE; a serve faster than

@@ -10,7 +10,7 @@
 
 #define PADDLE_WIDTH        24
 #define PADDLE_HEIGHT       160
-#define PADDLE_SPEED        14
+#define PADDLE_SPEED        14          // At 100% in the pause menu, before the rally speed-up
 #define PADDLE_MARGIN       60
 #define SWING_DURATION      14          // Racket swing animation length after a hit
 #define THROW_DURATION      18          // Hadouken thrust pose length after a fireball throw

@@ -12,7 +12,7 @@
 
 extern float speed_scale;    // Current rally's ball and paddle speed multiplier
 extern int paddle_hits;      // Ball hits by paddles this match, for the calamities
-extern int ball_speed_percent;  // Serve speed as a percent of INITIAL_BALL_SPEED, set in the pause menu
+extern int start_speed_percent; // Ball serve and player speed, percent of INITIAL_BALL_SPEED / PADDLE_SPEED (pause menu)
 
 float ball_base_speed(void);  // Serve speed in pixels per frame; rally speeds are multiples of it
 

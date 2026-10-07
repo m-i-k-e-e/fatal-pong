@@ -25,7 +25,7 @@ typedef struct {
 } Setting;
 
 static Setting settings[] = {
-    { "BALL START SPEED", &ball_speed_percent, 50, 200, 10 },
+    { "BALL AND PLAYER SPEED", &start_speed_percent, 50, 200, 10 },
     { "EVERY %dTH HIT, CALAMITY CHANCE", &calamity_chance, 0, 100, CALAMITY_CHANCE_STEP },
 };
 #define SETTING_COUNT ((int)(sizeof(settings) / sizeof(settings[0])))
@@ -61,7 +61,7 @@ static int repeat(int dir, int *held, int *frames) {
 }
 
 // Up/down on either pad picks a setting, left/right changes it by its step: once per press, then repeating
-// while held. Changes ball_speed_percent and calamity_chance.
+// while held. Changes start_speed_percent and calamity_chance.
 void update_pause_menu(SDL_GameController *pad1, SDL_GameController *pad2) {
     int dy = repeat(pad_dir(pad1, pad2, false), &held_y, &held_y_frames);
     selected = SDL_clamp(selected + dy, 0, SETTING_COUNT - 1);

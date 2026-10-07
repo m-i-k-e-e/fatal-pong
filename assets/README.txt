@@ -36,8 +36,8 @@ CONTROLS
 With one controller, it's split in two: player 1 moves with the D-pad or left stick and uses L1
 for the specials, player 2 moves with the right stick and uses Square or R1.
 
-In the pause menu, up/down picks a setting and left/right changes it: the ball's starting
-speed (50 to 200%) and the calamity chance.
+In the pause menu, up/down picks a setting and left/right changes it: the speed of the ball
+and the players (50 to 200%) and the calamity chance.
 
 
 RULES

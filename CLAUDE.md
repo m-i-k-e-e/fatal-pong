@@ -38,7 +38,7 @@ through `bash -c '...'`.
 | `bonus.c` | Bonus spawning, pickup, paddle effects, tiles and icons (textures from `bonus_icons.inc`), names/descriptions |
 | `players.c` | Player sprites: builds textures from `player_sprites.inc`, picks poses, ground shadow |
 | `hud.c` | Grass court texture, scores, dripping blood, mud, rock and slime lettering, start, finish-him, fatality and win screens |
-| `pause.c` | Options help overlay (move list, bonus legend) and the settings sliders (up/down to pick, left/right to change while paused): ball start speed (`ball_speed_percent` in ball.c) and calamity chance (`calamity_chance` in calamity.c) |
+| `pause.c` | Options help overlay (move list, bonus legend) and the settings sliders (up/down to pick, left/right to change while paused): ball and player speed (`start_speed_percent` in ball.c, scales the serve and `PADDLE_SPEED`) and calamity chance (`calamity_chance` in calamity.c) |
 | `draw.c` | Shared drawing helpers (`fill_pixel_oval`, used by the rift and the molehills) |
 | `text.c` | 5x7 bitmap font (the SDK has no SDL_ttf) |
 | `particles.c` | Fire trails and explosions |
