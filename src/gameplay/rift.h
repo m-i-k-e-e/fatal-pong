@@ -3,7 +3,7 @@
 #define PONG_RIFT_H
 
 #include "SDL2/SDL.h"
-#include "game.h"
+#include "core/game.h"
 
 #define RIFT_WARNING        30          // Frames the opponent has to step off the rift (half a second)
 #define VANISH_DURATION     60          // Frames a caught player is gone (1 second)

@@ -1,4 +1,4 @@
-#include "particles.h"
+#include "core/particles.h"
 #include <stdbool.h>
 #include <stdlib.h>
 

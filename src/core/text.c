@@ -1,4 +1,4 @@
-#include "text.h"
+#include "core/text.h"
 #include <ctype.h>
 
 #define GLYPH_W     5

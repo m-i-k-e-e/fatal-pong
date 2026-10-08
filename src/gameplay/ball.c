@@ -1,6 +1,6 @@
-#include "ball.h"
-#include "audio.h"
-#include "players.h"
+#include "gameplay/ball.h"
+#include "core/audio.h"
+#include "render/players.h"
 #include <stdlib.h>
 
 #define GRUNT_CHANCE        25          // Percent of hits the player grunts on

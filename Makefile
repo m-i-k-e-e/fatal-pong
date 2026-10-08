@@ -23,24 +23,31 @@ GRUNTS      := $(BUILD_DIR)/grunt.wav $(BUILD_DIR)/kasplat-grunt.wav
 SOUNDS      += $(GRUNTS)
 
 # Use the SDK's prospero toolchain and its bundled SDL2 (not a local copy of the headers).
-# EMBED_DIR is where audio.c .incbin's the converted sounds from.
-CFLAGS   := -O2 -Wall $(shell $(PKG_CONFIG) --cflags sdl2) -DEMBED_DIR=\"$(CURDIR)/$(BUILD_DIR)/\"
+# EMBED_DIR is where audio.c .incbin's the converted sounds from; includes are relative to src/ ("core/game.h").
+CFLAGS   := -O2 -Wall -Isrc $(shell $(PKG_CONFIG) --cflags sdl2) -DEMBED_DIR=\"$(CURDIR)/$(BUILD_DIR)/\"
 LDLIBS   := $(shell $(PKG_CONFIG) --static --libs sdl2) -lm
 
-SRCS     := main.c input.c audio.c ball.c bonus.c calamity.c draw.c fatality.c fireball.c hud.c paddle.c particles.c pause.c players.c rift.c text.c
-OBJS     := $(SRCS:%.c=$(BUILD_DIR)/%.o)
+# Sources are grouped by package: core/ (shared types, input, audio, drawing primitives), gameplay/ (the match
+# mechanics) and render/ (player sprites, HUD and screens, pause overlay)
+CORE_SRCS     := $(addprefix src/core/,input.c audio.c draw.c particles.c text.c)
+GAMEPLAY_SRCS := $(addprefix src/gameplay/,ball.c bonus.c calamity.c fatality.c fireball.c paddle.c rift.c)
+RENDER_SRCS   := $(addprefix src/render/,hud.c pause.c players.c)
+SRCS     := src/main.c $(CORE_SRCS) $(GAMEPLAY_SRCS) $(RENDER_SRCS)
+HDRS     := $(wildcard src/*/*.h)
+OBJS     := $(SRCS:src/%.c=$(BUILD_DIR)/obj/%.o)
 
 all: $(TARGET) $(ICON)
 
 $(TARGET): $(OBJS) | $(INSTALL_DIR)
 	$(CC) $(OBJS) -o $@ $(LDLIBS)
 
-$(BUILD_DIR)/%.o: %.c $(wildcard *.h) | $(BUILD_DIR)
+$(BUILD_DIR)/obj/%.o: src/%.c $(HDRS) | $(BUILD_DIR)
+	mkdir -p $(@D)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/audio.o: $(SOUNDS)
-$(BUILD_DIR)/players.o: player_sprites.inc
-$(BUILD_DIR)/bonus.o: bonus_icons.inc
+$(BUILD_DIR)/obj/core/audio.o: $(SOUNDS)
+$(BUILD_DIR)/obj/render/players.o: src/render/player_sprites.inc
+$(BUILD_DIR)/obj/gameplay/bonus.o: src/gameplay/bonus_icons.inc
 
 $(ICON): assets/icon0.png
 	mkdir -p $(@D)
@@ -67,12 +74,12 @@ clean:
 test: $(TARGET)
 	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $^
 
-# Home screen installer (installer.c): a payload carrying the game, its icon and the tile's metadata, which
+# Home screen installer (src/installer/installer.c): a payload carrying the game, its icon and the tile's metadata, which
 # installs a Fatal Pong tile; the tile starts the game through websrv
 INSTALLER   := $(BUILD_DIR)/$(APP_NAME)-installer.elf
 SHORTCUT    := assets/shortcut/param.json assets/shortcut/launch.html
 
-$(INSTALLER): installer.c $(TARGET) assets/icon0.png $(SHORTCUT) | $(BUILD_DIR)
+$(INSTALLER): src/installer/installer.c $(TARGET) assets/icon0.png $(SHORTCUT) | $(BUILD_DIR)
 	$(CC) -O2 -Wall -DEMBED_EBOOT=\"$(CURDIR)/$(TARGET)\" -DEMBED_ICON=\"$(CURDIR)/assets/icon0.png\" \
 		-DEMBED_PARAM=\"$(CURDIR)/assets/shortcut/param.json\" -DEMBED_LAUNCH=\"$(CURDIR)/assets/shortcut/launch.html\" \
 		$< -o $@ -lSceIpmi -lSceAppInstUtil
@@ -117,9 +124,9 @@ HOST_SDL      = $(shell pkg-config --cflags --libs sdl2)
 LINUX_DIR    := $(BUILD_DIR)/linux
 LINUX_BIN    := $(LINUX_DIR)/$(APP_NAME)
 
-$(LINUX_BIN): $(SRCS) $(wildcard *.h) player_sprites.inc bonus_icons.inc $(SOUNDS) | $(BUILD_DIR)
+$(LINUX_BIN): $(SRCS) $(HDRS) src/render/player_sprites.inc src/gameplay/bonus_icons.inc $(SOUNDS) | $(BUILD_DIR)
 	mkdir -p $(LINUX_DIR)
-	$(HOST_CC) -O2 -Wall -I. -DEMBED_DIR=\"$(CURDIR)/$(BUILD_DIR)/\" $(SRCS) -o $@ $(HOST_SDL) -lm
+	$(HOST_CC) -O2 -Wall -Isrc -DEMBED_DIR=\"$(CURDIR)/$(BUILD_DIR)/\" $(SRCS) -o $@ $(HOST_SDL) -lm
 
 linux: $(LINUX_BIN)
 
@@ -131,10 +138,12 @@ run-linux: $(LINUX_BIN)
 # with the real game code, built for this machine: needs a native compiler, SDL2 dev files and ffmpeg
 SHOT_DIR     := assets/screenshots
 FRAMES_DIR   := $(BUILD_DIR)/frames
-SHOT_SRCS    := tools/screenshots.c audio.c ball.c bonus.c draw.c fatality.c hud.c paddle.c particles.c pause.c players.c rift.c text.c
+# fireball.c and calamity.c are #included by screenshots.c itself
+SHOT_SRCS    := tools/screenshots.c $(CORE_SRCS) $(RENDER_SRCS) \
+                $(filter-out %/fireball.c %/calamity.c,$(GAMEPLAY_SRCS))
 
-$(BUILD_DIR)/screenshots: $(SHOT_SRCS) fireball.c calamity.c player_sprites.inc bonus_icons.inc $(wildcard *.h) $(SOUNDS) | $(BUILD_DIR)
-	$(HOST_CC) -O2 -Wall -I. -DEMBED_DIR=\"$(CURDIR)/$(BUILD_DIR)/\" $(SHOT_SRCS) -o $@ $(HOST_SDL) -lm
+$(BUILD_DIR)/screenshots: $(SRCS) tools/screenshots.c src/render/player_sprites.inc src/gameplay/bonus_icons.inc $(HDRS) $(SOUNDS) | $(BUILD_DIR)
+	$(HOST_CC) -O2 -Wall -Isrc -DEMBED_DIR=\"$(CURDIR)/$(BUILD_DIR)/\" $(SHOT_SRCS) -o $@ $(HOST_SDL) -lm
 
 screenshots: $(BUILD_DIR)/screenshots
 	rm -rf $(FRAMES_DIR)

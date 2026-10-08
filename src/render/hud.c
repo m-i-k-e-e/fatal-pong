@@ -1,7 +1,7 @@
-#include "hud.h"
-#include "bonus.h"
-#include "text.h"
-#include "input.h"
+#include "render/hud.h"
+#include "gameplay/bonus.h"
+#include "core/text.h"
+#include "core/input.h"
 #include <string.h>
 #include <stdio.h>
 

@@ -1,5 +1,5 @@
-#include "paddle.h"
-#include "ball.h"
+#include "gameplay/paddle.h"
+#include "gameplay/ball.h"
 #include <math.h>
 
 // A fresh paddle at column x, vertically centered, normal size, no bonus or timers

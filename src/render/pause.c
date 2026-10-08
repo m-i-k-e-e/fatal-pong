@@ -1,10 +1,10 @@
-#include "pause.h"
-#include "bonus.h"
-#include "fireball.h"
-#include "rift.h"
-#include "ball.h"
-#include "calamity.h"
-#include "text.h"
+#include "render/pause.h"
+#include "gameplay/bonus.h"
+#include "gameplay/fireball.h"
+#include "gameplay/rift.h"
+#include "gameplay/ball.h"
+#include "gameplay/calamity.h"
+#include "core/text.h"
 #include <stdio.h>
 
 #define PANEL_W     1400

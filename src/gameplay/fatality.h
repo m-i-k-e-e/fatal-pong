@@ -3,8 +3,8 @@
 #define PONG_FATALITY_H
 
 #include "SDL2/SDL.h"
-#include "game.h"
-#include "players.h"
+#include "core/game.h"
+#include "render/players.h"
 
 #define FATALITY_WINDOW     (5 * 60)    // Frames the winner has after the match to enter it
 #define FATALITY_PRESSES    3           // Triangle presses needed

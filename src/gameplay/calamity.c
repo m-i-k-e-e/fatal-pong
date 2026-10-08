@@ -1,9 +1,9 @@
-#include "calamity.h"
-#include "audio.h"
-#include "ball.h"
-#include "draw.h"
-#include "hud.h"
-#include "particles.h"
+#include "gameplay/calamity.h"
+#include "core/audio.h"
+#include "gameplay/ball.h"
+#include "core/draw.h"
+#include "render/hud.h"
+#include "core/particles.h"
 #include <stdlib.h>
 
 // A calamity puts obstacles on the court for CALAMITY_DURATION: the first few come quickly, then one is added

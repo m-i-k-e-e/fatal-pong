@@ -3,7 +3,7 @@
 #define PONG_PADDLE_H
 
 #include "SDL2/SDL.h"
-#include "game.h"
+#include "core/game.h"
 
 Paddle make_paddle(float x);
 void set_paddle_height(Paddle *p, float h);

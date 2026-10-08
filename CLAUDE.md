@@ -29,28 +29,33 @@ through `bash -c '...'`.
 
 ## Layout
 
+Sources live in `src/`, grouped by package: `core/` (shared types, input, audio, drawing primitives), `gameplay/` (the match
+mechanics), `render/` (player sprites, HUD and screens, the pause overlay) and `installer/` (the separate tile
+installer payload). Includes are relative to `src/` (`#include "core/game.h"`, `-Isrc`); a generated `.inc` sits next to
+the file that includes it.
+
 | File | Role |
 |---|---|
-| `main.c` | SDL setup (PS5: full-size window, software renderer; Linux: resizable window scaled with `SDL_RenderSetLogicalSize`, F11 fullscreen), controller hot-plug, game states (start screen with the character select, playing, paused, then FINISH / FATALITY / RESULT after the last point), main loop |
-| `input.c` | `read_controls()`: each frame, both players' controls (`PlayerControls`: move, directions, punch, finish, confirm, pause, quit) from their gamepad, half of a shared pad, or the keyboard (P1 WASD/F/G/Space/Esc/Q, P2 arrows/Right Ctrl/Right Shift); `KEY_HINT()` adds the keys to on-screen hints outside the PS5 build |
-| `game.h` | Shared constants, `BonusType`, `Paddle`, `Ball`, `rects_overlap` |
-| `paddle.c` | Movement (speed scale, bonus effects, stun), animation state (`stride`, `moving`, timers) |
-| `ball.c` | Ball physics, paddle hits, rally speed-up (`speed_scale`, on top of `ball_base_speed()`), zig-zag, grunts |
-| `fireball.c` | Special move input (down, forward, Square/R1: hadouken; down, back, Square/R1: rift; a shared pad is split, `PadPart`: left half D-pad/left stick + L1, right half right stick + Square/R1), fireballs, hits on paddle/ball/fireball |
-| `rift.c` | Rift under the opponent: half-second warning, then a caught player sinks, is gone (`vanish_timer`, ball passes), and rises back |
-| `fatality.c` | End-of-match fatality: thrown racket, head explosion, blood particles with gravity, stains, shake |
-| `calamity.c` | Calamities rolled every 10th paddle hit (`paddle_hits` in ball.c): the mole (molehills), the earthquake (tremors that shake the screen and open cracks; a ball that runs into a crack tunnels out of another one) or the frog rain (frogs landing in the way that swallow the ball, also with their tongue from a distance, and spit it out half a second later via `Ball.held` / `hidden`, plus decorative rain drawn in a sky layer over the players); shared obstacle timeline, ball knocks, the mud / rock / slime titles |
-| `bonus.c` | Bonus spawning, pickup, paddle effects, tiles and icons (textures from `bonus_icons.inc`), names/descriptions |
-| `players.c` | Player sprites: builds textures from `player_sprites.inc` for each `PlayerLook`, picks poses, ground shadow, the slow bonus ball and chain (`draw_ball_and_chain`), the full bonus force users (Vader or Luke, `Paddle.force_user`, Force waves from `force_push`), the zig-zag bonus crossed eyes (`CROSSED_EYES` overlay), the grow bonus hats (normal-size player at the bottom of the paddle, `TOP_HAT` / `LADY_HAT` above), the `_SCARED` face (white, wide eyes, raised brows, open mouth, trembling) of a player level with a ghost opponent (`scared_of_ghost` in main.c), names, hair colours |
-| `hud.c` | Grass court texture, scores, dripping blood, mud, rock and slime lettering, start screen with the character select (`draw_player_portrait`), finish-him / finish-her, fatality and win screens |
-| `pause.c` | Options help overlay (move list, bonus legend) and the settings sliders (up/down to pick, left/right to change while paused): ball and player speed (`start_speed_percent` in ball.c, scales the serve and `PADDLE_SPEED`) and calamity chance (`calamity_chance` in calamity.c) |
-| `draw.c` | Shared drawing helpers (`fill_pixel_oval`, used by the rift and the molehills) |
-| `text.c` | 5x7 bitmap font (the SDK has no SDL_ttf) |
-| `particles.c` | Fire trails and explosions |
-| `audio.c` | Embedded WAV clips (announcer, hadouken, racket boomerang, fatality scream, grunts), synthesized hadouken fallback, lightsaber and Force, splat, rift, mole, quake, croak, tongue and spit sounds, software mixer |
-| `installer.c` | Separate payload (`make installer`): embeds eboot.elf, the icon and `assets/shortcut/` (`param.json`, `launch.html`), writes them to `/user/app/PONG00001/` and registers the home screen tile (`sceAppInstUtilAppInstallTitleDir`, resolved by NID); the tile's deeplink opens `launch.html` through websrv, which starts the game via `/hbldr`, so websrv must be running |
-| `tools/gen_sprites.py` | Generates `player_sprites.inc` (sprites + palette) and the `assets/` previews |
-| `tools/gen_bonus_icons.py` | Generates `bonus_icons.inc` (the eight 16x16 bonus icons + palette, in `BonusType` order) and `assets/bonus_icons.png` |
+| `src/main.c` | SDL setup (PS5: full-size window, software renderer; Linux: resizable window scaled with `SDL_RenderSetLogicalSize`, F11 fullscreen), controller hot-plug, game states (start screen with the character select, playing, paused, then FINISH / FATALITY / RESULT after the last point), main loop |
+| `src/core/input.c` | `read_controls()`: each frame, both players' controls (`PlayerControls`: move, directions, punch, finish, confirm, pause, quit) from their gamepad, half of a shared pad, or the keyboard (P1 WASD/F/G/Space/Esc/Q, P2 arrows/Right Ctrl/Right Shift); `KEY_HINT()` adds the keys to on-screen hints outside the PS5 build |
+| `src/core/game.h` | Shared constants, `BonusType`, `Paddle`, `Ball`, `rects_overlap` |
+| `src/gameplay/paddle.c` | Movement (speed scale, bonus effects, stun), animation state (`stride`, `moving`, timers) |
+| `src/gameplay/ball.c` | Ball physics, paddle hits, rally speed-up (`speed_scale`, on top of `ball_base_speed()`), zig-zag, grunts |
+| `src/gameplay/fireball.c` | Special move input (down, forward, Square/R1: hadouken; down, back, Square/R1: rift; a shared pad is split, `PadPart`: left half D-pad/left stick + L1, right half right stick + Square/R1), fireballs, hits on paddle/ball/fireball |
+| `src/gameplay/rift.c` | Rift under the opponent: half-second warning, then a caught player sinks, is gone (`vanish_timer`, ball passes), and rises back |
+| `src/gameplay/fatality.c` | End-of-match fatality: thrown racket, head explosion, blood particles with gravity, stains, shake |
+| `src/gameplay/calamity.c` | Calamities rolled every 10th paddle hit (`paddle_hits` in ball.c): the mole (molehills), the earthquake (tremors that shake the screen and open cracks; a ball that runs into a crack tunnels out of another one) or the frog rain (frogs landing in the way that swallow the ball, also with their tongue from a distance, and spit it out half a second later via `Ball.held` / `hidden`, plus decorative rain drawn in a sky layer over the players); shared obstacle timeline, ball knocks, the mud / rock / slime titles |
+| `src/gameplay/bonus.c` | Bonus spawning, pickup, paddle effects, tiles and icons (textures from `bonus_icons.inc`), names/descriptions |
+| `src/render/players.c` | Player sprites: builds textures from `player_sprites.inc` for each `PlayerLook`, picks poses, ground shadow, the slow bonus ball and chain (`draw_ball_and_chain`), the full bonus force users (Vader or Luke, `Paddle.force_user`, Force waves from `force_push`), the zig-zag bonus crossed eyes (`CROSSED_EYES` overlay), the grow bonus hats (normal-size player at the bottom of the paddle, `TOP_HAT` / `LADY_HAT` above), the `_SCARED` face (white, wide eyes, raised brows, open mouth, trembling) of a player level with a ghost opponent (`scared_of_ghost` in main.c), names, hair colours |
+| `src/render/hud.c` | Grass court texture, scores, dripping blood, mud, rock and slime lettering, start screen with the character select (`draw_player_portrait`), finish-him / finish-her, fatality and win screens |
+| `src/render/pause.c` | Options help overlay (move list, bonus legend) and the settings sliders (up/down to pick, left/right to change while paused): ball and player speed (`start_speed_percent` in ball.c, scales the serve and `PADDLE_SPEED`) and calamity chance (`calamity_chance` in calamity.c) |
+| `src/core/draw.c` | Shared drawing helpers (`fill_pixel_oval`, used by the rift and the molehills) |
+| `src/core/text.c` | 5x7 bitmap font (the SDK has no SDL_ttf) |
+| `src/core/particles.c` | Fire trails and explosions |
+| `src/core/audio.c` | Embedded WAV clips (announcer, hadouken, racket boomerang, fatality scream, grunts), synthesized hadouken fallback, lightsaber and Force, splat, rift, mole, quake, croak, tongue and spit sounds, software mixer |
+| `src/installer/installer.c` | Separate payload (`make installer`): embeds eboot.elf, the icon and `assets/shortcut/` (`param.json`, `launch.html`), writes them to `/user/app/PONG00001/` and registers the home screen tile (`sceAppInstUtilAppInstallTitleDir`, resolved by NID); the tile's deeplink opens `launch.html` through websrv, which starts the game via `/hbldr`, so websrv must be running |
+| `tools/gen_sprites.py` | Generates `src/render/player_sprites.inc` (sprites + palette) and the `assets/` previews |
+| `tools/gen_bonus_icons.py` | Generates `src/gameplay/bonus_icons.inc` (the eight 16x16 bonus icons + palette, in `BonusType` order) and `assets/bonus_icons.png` |
 | `tools/gen_voice.sh` | Generates the announcer clips (`agassi-wins`, `nadal-wins`, `graf-wins`, `sharapova-wins`, `finish-him`, `finish-her`, `fatality` .mp3) with Piper TTS (voice `en_US-ryan-high`) + ffmpeg; pass clip names to regenerate only those |
 | `tools/gen_icon.py` | Generates the launcher icon `assets/icon0.png` (a shaded tennis ball over a blood splatter, blood dripping off it, "FATAL PONG" in Anton); run from the project root (needs Pillow) |
 | `tools/fonts/` | Anton (SIL Open Font License, `OFL.txt`), the icon's typeface |
@@ -58,7 +63,7 @@ through `bash -c '...'`.
 | `assets/` | Launcher icon, player README shipped in the zip, sprite previews, screenshots |
 
 Root-level `*.mp3` are the sound sources; the Makefile converts them to 48 kHz mono WAV in `target/` and
-`audio.c` embeds them with `.incbin` (`EMBED_DIR` is passed by the Makefile). The `.onnx` voice models,
+`src/core/audio.c` embeds them with `.incbin` (`EMBED_DIR` is passed by the Makefile). The `.onnx` voice models,
 `tts/` (Piper venv) and `in/SDL2` (an old local copy of the headers) are local tooling, not part of the build;
 the build uses the SDK's SDL2 headers.
 

@@ -1,8 +1,8 @@
-#include "rift.h"
-#include "audio.h"
-#include "draw.h"
-#include "particles.h"
-#include "players.h"
+#include "gameplay/rift.h"
+#include "core/audio.h"
+#include "core/draw.h"
+#include "core/particles.h"
+#include "render/players.h"
 #include <stdlib.h>
 
 // A rift opens on the ground under the opponent's feet and crackles for RIFT_WARNING frames, pulsing faster

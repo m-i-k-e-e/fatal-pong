@@ -5,18 +5,18 @@
 // hadouken, rift, mole, earthquake, frog-rain, win, fatality and finale .gif.
 #include "SDL2/SDL.h"
 #include <stdio.h>
-#include "game.h"
-#include "ball.h"
-#include "bonus.h"
-#include "fatality.h"
-#include "hud.h"
-#include "paddle.h"
-#include "particles.h"
-#include "pause.h"
-#include "players.h"
-#include "rift.h"
-#include "fireball.c"       // Pulled in whole for its file-static throw_fireball(): the real throw needs a controller
-#include "calamity.c"       // Likewise, to aim the rally at the molehills and cracks
+#include "core/game.h"
+#include "gameplay/ball.h"
+#include "gameplay/bonus.h"
+#include "gameplay/fatality.h"
+#include "render/hud.h"
+#include "gameplay/paddle.h"
+#include "core/particles.h"
+#include "render/pause.h"
+#include "render/players.h"
+#include "gameplay/rift.h"
+#include "gameplay/fireball.c"       // Pulled in whole for its file-static throw_fireball(): the real throw needs a controller
+#include "gameplay/calamity.c"       // Likewise, to aim the rally at the molehills and cracks
 
 #define FINALE_MAX_FRAMES   (20 * 60)        // Sanity cap on the finale scene
 

@@ -3,7 +3,7 @@
 #define PONG_BALL_H
 
 #include "SDL2/SDL.h"
-#include "game.h"
+#include "core/game.h"
 
 #define SPEED_UP_PER_HIT    1.05f       // Ball and paddle speed multiplier per ball hit, reset each serve
 #define MAX_SPEED_SCALE     3.0f        // Times INITIAL_BALL_SPEED: beyond it the ball can skip past a paddle in one frame

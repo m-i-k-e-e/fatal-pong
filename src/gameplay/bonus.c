@@ -1,6 +1,6 @@
-#include "bonus.h"
-#include "paddle.h"
-#include "audio.h"
+#include "gameplay/bonus.h"
+#include "gameplay/paddle.h"
+#include "core/audio.h"
 #include <stdlib.h>
 
 // Spawn in a paddle's lane; the paddle collects one by moving onto it and gets its effect.

@@ -1,5 +1,5 @@
-#include "fatality.h"
-#include "audio.h"
+#include "gameplay/fatality.h"
+#include "core/audio.h"
 #include <stdlib.h>
 
 // Timeline: the racket spins from the winner's hand to the loser's face; on impact the head bursts into

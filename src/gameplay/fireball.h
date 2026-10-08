@@ -3,8 +3,8 @@
 #define PONG_FIREBALL_H
 
 #include "SDL2/SDL.h"
-#include "game.h"
-#include "input.h"
+#include "core/game.h"
+#include "core/input.h"
 
 #define FIREBALL_W          44
 #define FIREBALL_H          30

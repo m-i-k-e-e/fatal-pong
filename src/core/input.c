@@ -1,4 +1,4 @@
-#include "input.h"
+#include "core/input.h"
 #include <stdlib.h>
 
 // A shared pad is split in two: player 1 on the left half (D-pad, left stick, L1), player 2 on the right half

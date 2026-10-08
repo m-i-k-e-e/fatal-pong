@@ -3,8 +3,8 @@
 #define PONG_HUD_H
 
 #include "SDL2/SDL.h"
-#include "game.h"
-#include "players.h"
+#include "core/game.h"
+#include "render/players.h"
 
 void init_court(SDL_Renderer *renderer);
 void free_court(void);

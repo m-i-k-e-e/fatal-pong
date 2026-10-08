@@ -2,7 +2,7 @@
 """Bonus icons in the players' pixel-art style: 16x16 objects shaded with material ramps, lit from the upper
 left (rounded parts shaded like spheres, flat parts bevelled), with a dark outline around the whole shape.
 
-Writes bonus_icons.inc (palette + one char array per bonus, in BonusType order) and assets/bonus_icons.png (a
+Writes src/gameplay/bonus_icons.inc (palette + one char array per bonus, in BonusType order) and assets/bonus_icons.png (a
 preview on the in-game tiles). Run from the project root: python3 tools/gen_bonus_icons.py (needs Pillow).
 """
 import math
@@ -246,7 +246,7 @@ def emit_inc(icons):
         out += [f'        "{row}",' for row in icon.rows()]
         out.append('    },')
     out += ['};', '']
-    open('bonus_icons.inc', 'w').write('\n'.join(out))
+    open('src/gameplay/bonus_icons.inc', 'w').write('\n'.join(out))
 
 
 def preview(icons, path):
@@ -275,4 +275,4 @@ if __name__ == '__main__':
     icons = [(name, make()) for name, make in ICONS]
     emit_inc(icons)
     preview(icons, 'assets/bonus_icons.png')
-    print('wrote bonus_icons.inc and assets/bonus_icons.png')
+    print('wrote src/gameplay/bonus_icons.inc and assets/bonus_icons.png')

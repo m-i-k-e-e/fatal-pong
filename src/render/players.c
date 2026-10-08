@@ -1,5 +1,5 @@
-#include "players.h"
-#include "rift.h"
+#include "render/players.h"
+#include "gameplay/rift.h"
 #include <stdio.h>
 
 // Each player is four stacked 32x80 layers (body, legs, left arm, racket arm), generated with their palette by

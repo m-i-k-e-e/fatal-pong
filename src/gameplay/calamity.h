@@ -5,7 +5,7 @@
 #define PONG_CALAMITY_H
 
 #include "SDL2/SDL.h"
-#include "game.h"
+#include "core/game.h"
 
 #define CALAMITY_EVERY_HITS 10
 #define CALAMITY_CHANCE_DEFAULT 26      // Percent, until changed in the pause menu

@@ -1,8 +1,8 @@
-#include "fireball.h"
-#include "audio.h"
-#include "ball.h"
-#include "particles.h"
-#include "rift.h"
+#include "gameplay/fireball.h"
+#include "core/audio.h"
+#include "gameplay/ball.h"
+#include "core/particles.h"
+#include "gameplay/rift.h"
 #include <stdlib.h>
 
 typedef struct {

@@ -3,7 +3,7 @@
 #define PONG_PLAYERS_H
 
 #include "SDL2/SDL.h"
-#include "game.h"
+#include "core/game.h"
 
 typedef enum { PLAYER_AGASSI, PLAYER_NADAL, PLAYER_GRAF, PLAYER_SHARAPOVA, PLAYER_COUNT } PlayerLook;
 

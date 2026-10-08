@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the player sprite layers and palette (player_sprites.inc) and preview images (assets/).
+"""Generate the player sprite layers and palette (src/render/player_sprites.inc) and preview images (assets/).
 
 Each player is drawn as four 32x80 layers stacked in the game: a body (big Pop!-figure head, torso,
 shorts), one of 4 leg frames (step cycle), a left arm (hanging, or the hadouken charge and thrust) and
@@ -948,7 +948,7 @@ if __name__ == "__main__":
         assert all(c in COLORS for c in tones + (outline or ''))
     built = {name: layers(p) for name, p in PLAYERS.items()}
     force = {name: force_layers(name, f) for name, f in FORCE_USERS.items()}
-    emit_inc("player_sprites.inc", built, force)
+    emit_inc("src/render/player_sprites.inc", built, force)
     previews(built, force)
-    print("wrote player_sprites.inc and assets/{agassi,nadal,players,agassi_frames,babies,force,crossed_eyes,hats,scared}.png, "
+    print("wrote src/render/player_sprites.inc and assets/{agassi,nadal,players,agassi_frames,babies,force,crossed_eyes,hats,scared}.png, "
           "assets/players.gif")

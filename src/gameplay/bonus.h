@@ -3,7 +3,7 @@
 #define PONG_BONUS_H
 
 #include "SDL2/SDL.h"
-#include "game.h"
+#include "core/game.h"
 
 #define BONUS_SIZE          56
 #define BONUS_DURATION      (10 * 60)   // Frames an effect lasts on a paddle (game runs at 60 FPS)

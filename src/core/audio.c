@@ -1,5 +1,5 @@
-#include "audio.h"
-#include "game.h"
+#include "core/audio.h"
+#include "core/game.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>

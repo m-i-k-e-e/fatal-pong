@@ -3,7 +3,7 @@
 #define PONG_PAUSE_H
 
 #include "SDL2/SDL.h"
-#include "input.h"
+#include "core/input.h"
 
 void update_pause_menu(const PlayerControls controls[2]);  // Every paused frame: the settings
 void draw_pause_menu(SDL_Renderer *renderer);

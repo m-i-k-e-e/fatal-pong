@@ -5,20 +5,20 @@
 #include <sys/types.h>
 #include <time.h>
 
-#include "game.h"
-#include "audio.h"
-#include "ball.h"
-#include "bonus.h"
-#include "fatality.h"
-#include "fireball.h"
-#include "input.h"
-#include "rift.h"
-#include "calamity.h"
-#include "hud.h"
-#include "paddle.h"
-#include "pause.h"
-#include "players.h"
-#include "particles.h"
+#include "core/game.h"
+#include "core/audio.h"
+#include "gameplay/ball.h"
+#include "gameplay/bonus.h"
+#include "gameplay/fatality.h"
+#include "gameplay/fireball.h"
+#include "core/input.h"
+#include "gameplay/rift.h"
+#include "gameplay/calamity.h"
+#include "render/hud.h"
+#include "gameplay/paddle.h"
+#include "render/pause.h"
+#include "render/players.h"
+#include "core/particles.h"
 
 #define WIN_SCREEN_MIN_FRAMES   90      // Win screen shows at least 1.5 s before Cross starts a new match
 
