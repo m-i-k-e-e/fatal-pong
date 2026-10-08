@@ -58,12 +58,12 @@ $(BUILD_DIR) $(INSTALL_DIR):
 
 # SDL core only decodes WAV, so convert clips to 48 kHz mono 16-bit (the audio device format)
 # and trim trailing silence so they don't hold a mixer voice
-$(BUILD_DIR)/%.wav: %.mp3 | $(BUILD_DIR)
+$(BUILD_DIR)/%.wav: sounds/%.mp3 | $(BUILD_DIR)
 	ffmpeg -y -loglevel error -i $< -ac 1 -ar 48000 -c:a pcm_s16le \
 		-af "areverse,silenceremove=start_periods=1:start_threshold=-60dB,areverse" $@
 
 # Grunts also lose their leading silence, so they land with the hit
-$(GRUNTS): $(BUILD_DIR)/%.wav: %.mp3 | $(BUILD_DIR)
+$(GRUNTS): $(BUILD_DIR)/%.wav: sounds/%.mp3 | $(BUILD_DIR)
 	ffmpeg -y -loglevel error -i $< -ac 1 -ar 48000 -c:a pcm_s16le \
 		-af "silenceremove=start_periods=1:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_threshold=-60dB,areverse" $@
 

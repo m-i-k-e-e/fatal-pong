@@ -56,13 +56,13 @@ the file that includes it.
 | `src/installer/installer.c` | Separate payload (`make installer`): embeds eboot.elf, the icon and `assets/shortcut/` (`param.json`, `launch.html`), writes them to `/user/app/PONG00001/` and registers the home screen tile (`sceAppInstUtilAppInstallTitleDir`, resolved by NID); the tile's deeplink opens `launch.html` through websrv, which starts the game via `/hbldr`, so websrv must be running |
 | `tools/gen_sprites.py` | Generates `src/render/player_sprites.inc` (sprites + palette) and the `assets/` previews |
 | `tools/gen_bonus_icons.py` | Generates `src/gameplay/bonus_icons.inc` (the eight 16x16 bonus icons + palette, in `BonusType` order) and `assets/bonus_icons.png` |
-| `tools/gen_voice.sh` | Generates the announcer clips (`agassi-wins`, `nadal-wins`, `graf-wins`, `sharapova-wins`, `finish-him`, `finish-her`, `fatality` .mp3) with Piper TTS (voice `en_US-ryan-high`) + ffmpeg; pass clip names to regenerate only those |
+| `tools/gen_voice.sh` | Generates the announcer clips (`agassi-wins`, `nadal-wins`, `graf-wins`, `sharapova-wins`, `finish-him`, `finish-her`, `fatality` .mp3, into `sounds/`) with Piper TTS (voice `en_US-ryan-high`) + ffmpeg; pass clip names to regenerate only those |
 | `tools/gen_icon.py` | Generates the launcher icon `assets/icon0.png` (a shaded tennis ball over a blood splatter, blood dripping off it, "FATAL PONG" in Anton); run from the project root (needs Pillow) |
 | `tools/fonts/` | Anton (SIL Open Font License, `OFL.txt`), the icon's typeface |
 | `tools/screenshots.c` | Off-screen promo renders, driven by `make screenshots` |
 | `assets/` | Launcher icon, player README shipped in the zip, sprite previews, screenshots |
 
-Root-level `*.mp3` are the sound sources; the Makefile converts them to 48 kHz mono WAV in `target/` and
+`sounds/*.mp3` are the sound sources; the Makefile converts them to 48 kHz mono WAV in `target/` and
 `src/core/audio.c` embeds them with `.incbin` (`EMBED_DIR` is passed by the Makefile). The `.onnx` voice models,
 `tts/` (Piper venv) and `in/SDL2` (an old local copy of the headers) are local tooling, not part of the build;
 the build uses the SDK's SDL2 headers.
