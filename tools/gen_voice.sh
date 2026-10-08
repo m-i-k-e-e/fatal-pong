@@ -1,7 +1,8 @@
 #!/bin/sh
-# Generate the announcer clips (agassi-wins, nadal-wins, finish-him, fatality, da-mole) as .mp3, in a dark,
-# Mortal Kombat style, or hyped like a Ridge Racer race announcer for clips marked `arena`. Pass clip names to regenerate only those, e.g.
-# `tools/gen_voice.sh fatality`; EXT=wav writes 48 kHz mono 16-bit WAV instead (the game's format).
+# Generate the announcer clips (agassi-wins, nadal-wins, graf-wins, sharapova-wins, finish-him, finish-her,
+# fatality, da-mole) as sounds/<clip>.mp3, in a dark, Mortal Kombat style, or hyped like a Ridge Racer race announcer for
+# clips marked `arena`. Pass clip names to regenerate only those, e.g.
+# `tools/gen_voice.sh fatality` (run from the project root); EXT=wav writes 48 kHz mono 16-bit WAV instead (the game's format).
 # Needs Piper TTS with a voice model (the existing clips used en_US-ryan-high), and ffmpeg built with rubberband:
 #   uv venv tts && uv pip install --python tts/bin/python piper-tts
 #   tts/bin/python -m piper.download_voices en_US-ryan-high
@@ -15,7 +16,10 @@ trap 'rm -rf "$TMP"' EXIT
 
 PHRASES="Agassi wins!|agassi-wins|dark
 Nadal wins!|nadal-wins|dark
+Graf wins!|graf-wins|dark
+Sharapova wins!|sharapova-wins|dark
 Finish him!|finish-him|dark
+Finish her!|finish-her|dark
 Fatality!|fatality|dark
 DA MOLE!|da-mole|arena"
 
@@ -49,7 +53,7 @@ ARENA="[0:a]aresample=48000,apad=pad_dur=0.2,asplit=2[v][dbl];
 
 echo "$PHRASES" | while IFS='|' read -r text clip style; do
     if [ $# -gt 0 ] && ! echo " $* " | grep -q " $clip "; then continue; fi
-    out=$clip.$EXT
+    out=sounds/$clip.$EXT
     if [ "$style" = arena ]; then filter=$ARENA; length=1.2; else filter=$DARK; length=1.3; fi
     if [ "$EXT" = wav ]; then codec="-c:a pcm_s16le"; else codec="-b:a 192k"; fi
     echo "$text" | $PIPER -m "$VOICE" --length-scale $length -f "$TMP/raw.wav"

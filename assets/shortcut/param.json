@@ -1,0 +1,10 @@
+{
+    "titleId": "PONG00001",
+    "deeplinkUri": "http://127.0.0.1:8080/fs/user/app/PONG00001/launch.html",
+    "localizedParameters": {
+        "defaultLanguage": "en-US",
+        "en-US": {
+            "titleName": "Fatal Pong"
+        }
+    }
+}

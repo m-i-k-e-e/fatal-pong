@@ -1,22 +1,22 @@
 // Renders promo screenshots with the real game code on the host, off-screen, as BMP frames in
 // target/frames: the start screen, the pause screen, the win screen, a hadouken, a rift, the mole, the
 // earthquake, the frog rain, a fatality and a whole match ending. `make screenshots` builds and runs it, then
-// turns the frames into assets/screenshots/: start, pause, win, mole, earthquake, frog-rain and finale .png, and
+// turns the frames into target/screenshots/: start, pause, win, mole, earthquake, frog-rain and finale .png, and
 // hadouken, rift, mole, earthquake, frog-rain, win, fatality and finale .gif.
 #include "SDL2/SDL.h"
 #include <stdio.h>
-#include "game.h"
-#include "ball.h"
-#include "bonus.h"
-#include "fatality.h"
-#include "hud.h"
-#include "paddle.h"
-#include "particles.h"
-#include "pause.h"
-#include "players.h"
-#include "rift.h"
-#include "fireball.c"       // Pulled in whole for its file-static throw_fireball(): the real throw needs a controller
-#include "calamity.c"       // Likewise, to aim the rally at the molehills and cracks
+#include "core/game.h"
+#include "gameplay/ball.h"
+#include "gameplay/bonus.h"
+#include "gameplay/fatality.h"
+#include "render/hud.h"
+#include "gameplay/paddle.h"
+#include "core/particles.h"
+#include "render/pause.h"
+#include "render/players.h"
+#include "gameplay/rift.h"
+#include "gameplay/fireball.c"       // Pulled in whole for its file-static throw_fireball(): the real throw needs a controller
+#include "gameplay/calamity.c"       // Likewise, to aim the rally at the molehills and cracks
 
 #define FINALE_MAX_FRAMES   (20 * 60)        // Sanity cap on the finale scene
 
@@ -43,8 +43,8 @@ static void draw_scene(const Paddle *p1, const Paddle *p2, const Ball *ball) {
     draw_calamity_ground(renderer);
     draw_rifts(renderer);
     draw_particles(renderer);
-    draw_player(renderer, p1, PLAYER_AGASSI, true);
-    draw_player(renderer, p2, PLAYER_NADAL, false);
+    draw_player(renderer, p1, PLAYER_AGASSI, true, false);
+    draw_player(renderer, p2, PLAYER_NADAL, false, false);
     draw_fireballs(renderer);
     draw_ball(renderer, ball);
     draw_calamity_sky(renderer);
@@ -133,7 +133,7 @@ int main(void) {
     Ball ball = { 0, 0, 0, 0, BALL_SIZE };
     reset_ball(&ball, 1);
     draw_scene(&p1, &p2, &ball);
-    draw_start_screen(renderer, 3000);                   // Late enough for the title drips to have run
+    draw_start_screen(renderer, 3000, PLAYER_AGASSI, PLAYER_SHARAPOVA);                   // Late enough for the title drips to have run
     save("target/frames/start.bmp");
 
     // Pause: the help panel over a match in progress, Agassi holding a bonus
@@ -222,7 +222,7 @@ int main(void) {
         if (t > 34 && !fatality_active()) break;
         if (t % 3) continue;                                            // 20 fps keeps the GIF small
         draw_scene(&p1, &p2, &ball);
-        if (t <= 34) draw_finish_screen(renderer, t, FATALITY_WINDOW - t, FATALITY_WINDOW, presses, FATALITY_PRESSES);
+        if (t <= 34) draw_finish_screen(renderer, t, FATALITY_WINDOW - t, FATALITY_WINDOW, presses, FATALITY_PRESSES, false);
         else draw_fatality_screen(renderer, fatality_since_impact());
         snprintf(path, sizeof(path), "target/frames/fatality_%03d.bmp", frame++);
         save(path);
@@ -268,7 +268,7 @@ int main(void) {
         bool still = phase == 3 && end_timer == 120;
         if (t % 3 && !still) continue;                                  // 20 fps
         draw_scene(&p1, &p2, &ball);
-        if (phase == 1) draw_finish_screen(renderer, end_timer, FATALITY_WINDOW - end_timer, FATALITY_WINDOW, presses, FATALITY_PRESSES);
+        if (phase == 1) draw_finish_screen(renderer, end_timer, FATALITY_WINDOW - end_timer, FATALITY_WINDOW, presses, FATALITY_PRESSES, false);
         else if (phase == 2) draw_fatality_screen(renderer, fatality_since_impact());
         else if (phase == 3) draw_win_screen(renderer, player_name(PLAYER_AGASSI), p1.score, p2.score, end_timer >= 90, end_timer);
         if (still) save("target/frames/finale.bmp");

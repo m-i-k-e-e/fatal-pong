@@ -2,10 +2,13 @@
 """Bonus icons in the players' pixel-art style: 16x16 objects shaded with material ramps, lit from the upper
 left (rounded parts shaded like spheres, flat parts bevelled), with a dark outline around the whole shape.
 
-Writes bonus_icons.inc (palette + one char array per bonus, in BonusType order) and assets/bonus_icons.png (a
-preview on the in-game tiles). Run from the project root: python3 tools/gen_bonus_icons.py (needs Pillow).
+Writes src/gameplay/bonus_icons.inc (palette + one char array per bonus, in BonusType order) and target/screenshots/previews/
+bonus_icons.png (a preview on the in-game tiles). Run from the project root: python3 tools/gen_bonus_icons.py
+(needs Pillow; --previews-only skips the .inc, make screenshots uses it).
 """
 import math
+import os
+import sys
 from PIL import Image
 
 N = 16
@@ -246,11 +249,12 @@ def emit_inc(icons):
         out += [f'        "{row}",' for row in icon.rows()]
         out.append('    },')
     out += ['};', '']
-    open('bonus_icons.inc', 'w').write('\n'.join(out))
+    open('src/gameplay/bonus_icons.inc', 'w').write('\n'.join(out))
 
 
 def preview(icons, path):
-    """Each icon on its in-game tile (green or red frame), 3x like on the field"""
+    """Each icon on its in-game tile (green or red frame), 3x like on the field; creates path's folder"""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     scale, tile, gap = 3, 56, 16
     img = Image.new('RGB', (len(icons) * (tile + gap) + gap, tile + 2 * gap), (60, 130, 50))
     for k, (name, icon) in enumerate(icons):
@@ -273,6 +277,8 @@ def preview(icons, path):
 
 if __name__ == '__main__':
     icons = [(name, make()) for name, make in ICONS]
-    emit_inc(icons)
-    preview(icons, 'assets/bonus_icons.png')
-    print('wrote bonus_icons.inc and assets/bonus_icons.png')
+    if '--previews-only' not in sys.argv:
+        emit_inc(icons)
+        print('wrote src/gameplay/bonus_icons.inc')
+    preview(icons, 'target/screenshots/previews/bonus_icons.png')
+    print('wrote target/screenshots/previews/bonus_icons.png')

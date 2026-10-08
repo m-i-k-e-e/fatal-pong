@@ -2,6 +2,7 @@ PS5 FATAL PONG
 ==============
 
 Two-player pong with Street Fighter fireballs and field bonuses, for jailbroken PS5s.
+Play as Agassi, Nadal, Graf or Sharapova.
 
 
 INSTALL
@@ -20,10 +21,23 @@ Bare payload:
 
 Everything (sounds included) is inside the executable; no other files are needed.
 
+Linux:
+  Unpack fatal-pong-linux-<arch>-<version>.tar.gz and run ./fatal-pong/fatal-pong. It
+  only needs SDL2 (on most distributions it's already installed: package libsdl2 /
+  SDL2). Plug in one or two gamepads or use the keyboard.
+
+Home screen tile (optional):
+  Send fatal-pong-installer-<version>.elf to your ELF loader once. A notification
+  confirms it, and a Fatal Pong tile appears on the home screen (it may land in
+  the Media category). Selecting it starts the game through websrv, so websrv has
+  to be running (load it at startup with your payload manager). Send a newer
+  installer to update the game behind the tile.
+
 
 CONTROLS
 --------
 
+  Choose player      Left/right on the title screen (player 2: right stick on a shared pad)
   Start game         Cross (player 1, on the title screen)
   Move paddle        D-pad up/down or left stick
   Hadouken           Down, Forward, then Square or R1
@@ -33,7 +47,18 @@ CONTROLS
   Quit               Touchpad click + Options
   New match          Cross (after a player wins)
 
-With one controller, player 1 uses the left stick and player 2 the right stick.
+With one controller, it's split in two: player 1 moves with the D-pad or left stick and uses L1
+for the specials, player 2 moves with the right stick and uses Square or R1.
+
+Keyboard (Linux build):
+  Player 1           W/S move, A/D left/right, F = Square, G = Triangle
+  Player 2           Arrow keys, Right Ctrl (or .) = Square, Right Shift (or /) = Triangle
+  Start / confirm    Space or Enter
+  Pause / help       Esc            Quit: Q on the pause screen, or close the window
+  Fullscreen         F11
+
+In the pause menu, up/down picks a setting and left/right changes it: the speed of the ball
+and the players (50 to 200%) and the calamity chance.
 
 
 RULES
@@ -46,7 +71,8 @@ RULES
   - One fireball per player at a time; two fireballs cancel each other out.
   - A rift opens under the opponent's feet. If they haven't stepped off it within half a
     second, they fall through and are gone for 1 second: the ball goes straight past.
-  - Every 10th paddle hit has a 26% chance of bringing a calamity, for 20 seconds:
+  - Every 10th paddle hit has a 26% chance of bringing a calamity, for 20 seconds (change the
+    chance from 0 to 100% in the pause menu):
       The mole        Digs 3 to 5 molehills around the court and keeps moving them.
       The earthquake  Every tremor shakes the ground and opens a crack, 3 to 5 at a
                       time, old ones closing as new ones open.
@@ -54,8 +80,9 @@ RULES
                       off as new ones land; the small ones only pass through. A big frog
                       swallows the ball, or catches it from a distance with its tongue,
                       keeps it half a second and spits it out in a random direction.
-    A ball that hits a molehill or a crack is knocked off at an angle or bounces back.
-  - When the match is won: FINISH HIM! The winner can throw the racket into the
+    A ball that hits a molehill is knocked off at an angle or bounces back; one that
+    runs into a crack drops in and comes out of another crack.
+  - When the match is won: FINISH HIM! (or HER!) The winner can throw the racket into the
     loser's face with a fatality.
 
 
@@ -66,7 +93,10 @@ Bonuses appear in the paddle lanes; move onto one to collect it. Effects last
 10 seconds and a new bonus replaces the current one.
 
   Green (good)                      Red (bad)
-  GROW     double paddle height     SHRINK   half paddle height
-  FULL     paddle fills the screen  GHOST    paddle invisible (still blocks)
-  FAST     faster paddle            SLOW     slower paddle
+  GROW     double paddle height     SHRINK   half paddle height (you're a baby)
+           (under a very tall hat)
+  FULL     Vader or Luke holds the  GHOST    paddle invisible (still blocks;
+           whole lane with the Force         the opponent, facing it, is terrified)
+  FAST     faster paddle            SLOW     slower paddle (ball and chain)
   ZIG-ZAG  balls you hit zig-zag    INVERT   up and down swapped
+           (and you go cross-eyed)

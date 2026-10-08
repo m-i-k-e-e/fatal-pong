@@ -1,0 +1,9 @@
+# Build output: objects, converted sounds, binaries, releases, screenshots and previews (make clean)
+/target/
+
+# Piper voice models for tools/gen_voice.sh, downloaded locally
+/*.onnx
+/*.onnx.json
+
+# IDE settings
+/.idea/
