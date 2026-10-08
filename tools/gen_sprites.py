@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Generate the player sprite layers and palette (src/render/player_sprites.inc) and preview images (assets/).
+"""Generate the player sprite layers and palette (src/render/player_sprites.inc) and preview images
+(target/screenshots/previews/).
 
 Each player is drawn as four 32x80 layers stacked in the game: a body (big Pop!-figure head, torso,
 shorts), one of 4 leg frames (step cycle), a left arm (hanging, or the hadouken charge and thrust) and
@@ -11,9 +12,11 @@ a lighting pass picks one of each material's 4 tones (light from the upper left:
 a sphere, everything else by its edges) and a final pass adds a selective outline in each material's
 darkest colour. Facial features are placed by hand on top.
 
-Run from the project root:  python3 tools/gen_sprites.py
+Run from the project root:  python3 tools/gen_sprites.py  (--previews-only skips the .inc; make screenshots uses it)
 """
 import math
+import os
+import sys
 
 W, H = 32, 80
 STEP_FRAMES = 4
@@ -846,8 +849,10 @@ def emit_inc(path, built, force):
         out.append("")
     open(path, "w").write("\n".join(out))
 
-def previews(built, force):
+# Writes the preview PNGs and GIF into out_dir (created if needed)
+def previews(built, force, out_dir):
     from PIL import Image
+    os.makedirs(out_dir, exist_ok=True)
     bg, scale, pad = (14, 14, 18), 8, 40
 
     def compose(stack, mirror=False, h=H):
@@ -874,10 +879,10 @@ def previews(built, force):
         return [l['headless' if headless else 'body'], l['legs'][step], l['left'][left], l['arm'][arm]]
 
     for name in built:
-        compose(stack(name)).save(f"assets/{name.lower()}.png")
-    lineup([stack(name) + [crossed_eyes()] for name in built]).save("assets/crossed_eyes.png")
+        compose(stack(name)).save(f"{out_dir}/{name.lower()}.png")
+    lineup([stack(name) + [crossed_eyes()] for name in built]).save(f"{out_dir}/crossed_eyes.png")
     lineup([stack(name)[:1] + [scared(built[name]['body'], HEAD_ROWS)] + stack(name)[1:] for name in built]
-           ).save("assets/scared.png")
+           ).save(f"{out_dir}/scared.png")
 
     # Each player with their hat, the way it sits in game: body layers padded on top, the hat at the bottom
     def hatted(name, mirror):
@@ -889,8 +894,8 @@ def previews(built, force):
     sheet = Image.new('RGB', ((imgs[0].width + pad) * len(imgs) + pad, imgs[0].height + pad * 2), bg)
     for i, im in enumerate(imgs):
         sheet.paste(im, (pad + i * (im.width + pad), pad))
-    sheet.save("assets/hats.png")
-    lineup([stack(name) for name in built]).save("assets/players.png")
+    sheet.save(f"{out_dir}/hats.png")
+    lineup([stack(name) for name in built]).save(f"{out_dir}/players.png")
 
     # Sheet: step cycle, swing, the hadouken charge and thrust, then the fatality (unarmed throw, headless)
     cells = ([stack('AGASSI', step=i) for i in range(STEP_FRAMES)] +
@@ -904,7 +909,7 @@ def previews(built, force):
     sheet = Image.new('RGB', (cw * 4 + pad, ch * 4 + pad), bg)
     for i, im in enumerate(imgs):
         sheet.paste(im, (pad + (i % 4) * cw, pad + (i // 4) * ch))
-    sheet.save("assets/agassi_frames.png")
+    sheet.save(f"{out_dir}/agassi_frames.png")
 
     # Animated GIF: both players walking, swinging, then throwing a hadouken, as in game
     def both(**kw):
@@ -912,7 +917,7 @@ def previews(built, force):
     frames = [both(step=i % 4) for i in range(8)]
     frames += [both(arm=f) for f in (2, 2, 3, 3, 3, 1, 1, 0, 0, 0)]
     frames += [both(left=1, arm=CHARGE)] * 5 + [both(left=2, arm=THRUST)] * 5 + [both()] * 3
-    frames[0].save("assets/players.gif", save_all=True, append_images=frames[1:], duration=90, loop=0)
+    frames[0].save(f"{out_dir}/players.gif", save_all=True, append_images=frames[1:], duration=90, loop=0)
 
     # Babies: each standing, swinging, charging and throwing, then headless
     def baby(pl, step=0, left=0, arm=0, headless=False, mirror=False):
@@ -928,7 +933,7 @@ def previews(built, force):
     sheet = Image.new('RGB', (cw * 5 + pad, ch * len(built) + pad), bg)
     for i, im in enumerate(cells):
         sheet.paste(im, (pad + (i % 5) * cw, pad + (i // 5) * ch))
-    sheet.save("assets/babies.png")
+    sheet.save(f"{out_dir}/babies.png")
 
     # Force users: each idle, pushing, then headless
     cells = []
@@ -939,7 +944,9 @@ def previews(built, force):
     sheet = Image.new('RGB', (cw * 3 + pad, ch * len(force) + pad), bg)
     for i, im in enumerate(cells):
         sheet.paste(im, (pad + (i % 3) * cw, pad + (i // 3) * ch))
-    sheet.save("assets/force.png")
+    sheet.save(f"{out_dir}/force.png")
+
+PREVIEW_DIR = "target/screenshots/previews"
 
 if __name__ == "__main__":
     assert len(HEAD_MASK) == 44 and all(len(r) == 12 for r in HEAD_MASK)
@@ -948,7 +955,9 @@ if __name__ == "__main__":
         assert all(c in COLORS for c in tones + (outline or ''))
     built = {name: layers(p) for name, p in PLAYERS.items()}
     force = {name: force_layers(name, f) for name, f in FORCE_USERS.items()}
-    emit_inc("src/render/player_sprites.inc", built, force)
-    previews(built, force)
-    print("wrote src/render/player_sprites.inc and assets/{agassi,nadal,players,agassi_frames,babies,force,crossed_eyes,hats,scared}.png, "
-          "assets/players.gif")
+    if "--previews-only" not in sys.argv:
+        emit_inc("src/render/player_sprites.inc", built, force)
+        print("wrote src/render/player_sprites.inc")
+    previews(built, force, PREVIEW_DIR)
+    print(f"wrote {PREVIEW_DIR}/{{agassi,nadal,players,agassi_frames,babies,force,crossed_eyes,hats,scared}}.png, "
+          f"{PREVIEW_DIR}/players.gif")

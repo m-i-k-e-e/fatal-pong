@@ -133,22 +133,27 @@ linux: $(LINUX_BIN)
 run-linux: $(LINUX_BIN)
 	$(LINUX_BIN)
 
-# Promo screenshots (assets/screenshots/start, pause, win, mole, earthquake, frog-rain, finale .png and hadouken, rift, mole,
+# Promo screenshots (target/screenshots/start, pause, win, mole, earthquake, frog-rain, finale .png and hadouken, rift, mole,
 # earthquake, frog-rain, win, fatality, finale .gif), rendered by tools/screenshots.c
-# with the real game code, built for this machine: needs a native compiler, SDL2 dev files and ffmpeg
-SHOT_DIR     := assets/screenshots
+# with the real game code, built for this machine: needs a native compiler, SDL2 dev files and ffmpeg; plus the
+# sprite and bonus icon previews in target/screenshots/previews/ (the generators' previews only: needs Pillow)
+SHOT_DIR     := $(BUILD_DIR)/screenshots
 FRAMES_DIR   := $(BUILD_DIR)/frames
 # fireball.c and calamity.c are #included by screenshots.c itself
 SHOT_SRCS    := tools/screenshots.c $(CORE_SRCS) $(RENDER_SRCS) \
                 $(filter-out %/fireball.c %/calamity.c,$(GAMEPLAY_SRCS))
+SHOT_BIN     := $(BUILD_DIR)/tools/screenshots
 
-$(BUILD_DIR)/screenshots: $(SRCS) tools/screenshots.c src/render/player_sprites.inc src/gameplay/bonus_icons.inc $(HDRS) $(SOUNDS) | $(BUILD_DIR)
+$(SHOT_BIN): $(SRCS) tools/screenshots.c src/render/player_sprites.inc src/gameplay/bonus_icons.inc $(HDRS) $(SOUNDS) | $(BUILD_DIR)
+	mkdir -p $(@D)
 	$(HOST_CC) -O2 -Wall -Isrc -DEMBED_DIR=\"$(CURDIR)/$(BUILD_DIR)/\" $(SHOT_SRCS) -o $@ $(HOST_SDL) -lm
 
-screenshots: $(BUILD_DIR)/screenshots
+screenshots: $(SHOT_BIN)
 	rm -rf $(FRAMES_DIR)
 	mkdir -p $(FRAMES_DIR) $(SHOT_DIR)
-	$(BUILD_DIR)/screenshots
+	$(SHOT_BIN)
+	python3 tools/gen_sprites.py --previews-only
+	python3 tools/gen_bonus_icons.py --previews-only
 	ffmpeg -y -loglevel error -i $(FRAMES_DIR)/start.bmp $(SHOT_DIR)/start.png
 	ffmpeg -y -loglevel error -i $(FRAMES_DIR)/pause.bmp $(SHOT_DIR)/pause.png
 	ffmpeg -y -loglevel error -i $(FRAMES_DIR)/win.bmp $(SHOT_DIR)/win.png
@@ -182,6 +187,6 @@ screenshots: $(BUILD_DIR)/screenshots
 		-vf "scale=960:-1:flags=neighbor,split[a][b];[a]palettegen=max_colors=128[p];[b][p]paletteuse=dither=none" \
 		$(SHOT_DIR)/finale.gif
 	rm -rf $(FRAMES_DIR)
-	@ls -l $(SHOT_DIR)
+	@ls -l $(SHOT_DIR) $(SHOT_DIR)/previews
 
 .PHONY: all clean test install installer install-shortcut linux run-linux dist screenshots

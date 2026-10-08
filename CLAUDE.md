@@ -16,7 +16,7 @@ toolbox run -c ps5 make linux         # target/linux/fatal-pong, native build wi
 toolbox run -c ps5 make run-linux     # build and run it (resizable window, F11 fullscreen)
 toolbox run -c ps5 make installer     # target/fatal-pong-installer.elf: the home screen tile installer
 toolbox run -c ps5 make install-shortcut  # send the installer to elfldr: adds/updates the home screen tile
-toolbox run -c ps5 make screenshots   # assets/screenshots/: {start,pause,win,mole,earthquake,frog-rain,finale}.png and a GIF per scene
+toolbox run -c ps5 make screenshots   # target/screenshots/: {start,pause,win,mole,earthquake,frog-rain,finale}.png, a GIF per scene, previews/ (sprites, bonus icons)
 toolbox run -c ps5 make install       # FTP upload to /data/homebrew/fatal-pong (PS5_HOST, ftpsrv on 2121)
 toolbox run -c ps5 make test          # send the bare ELF to elfldr (port 9021)
 toolbox run -c ps5 make clean         # rm -rf target/
@@ -54,13 +54,13 @@ the file that includes it.
 | `src/core/particles.c` | Fire trails and explosions |
 | `src/core/audio.c` | Embedded WAV clips (announcer, hadouken, racket boomerang, fatality scream, grunts), synthesized hadouken fallback, lightsaber and Force, splat, rift, mole, quake, croak, tongue and spit sounds, software mixer |
 | `src/installer/installer.c` | Separate payload (`make installer`): embeds eboot.elf, the icon and `assets/shortcut/` (`param.json`, `launch.html`), writes them to `/user/app/PONG00001/` and registers the home screen tile (`sceAppInstUtilAppInstallTitleDir`, resolved by NID); the tile's deeplink opens `launch.html` through websrv, which starts the game via `/hbldr`, so websrv must be running |
-| `tools/gen_sprites.py` | Generates `src/render/player_sprites.inc` (sprites + palette) and the `assets/` previews |
-| `tools/gen_bonus_icons.py` | Generates `src/gameplay/bonus_icons.inc` (the eight 16x16 bonus icons + palette, in `BonusType` order) and `assets/bonus_icons.png` |
+| `tools/gen_sprites.py` | Generates `src/render/player_sprites.inc` (sprites + palette) and the previews in `target/screenshots/previews/` (`--previews-only` skips the `.inc`) |
+| `tools/gen_bonus_icons.py` | Generates `src/gameplay/bonus_icons.inc` (the eight 16x16 bonus icons + palette, in `BonusType` order) and `target/screenshots/previews/bonus_icons.png` (`--previews-only` skips the `.inc`) |
 | `tools/gen_voice.sh` | Generates the announcer clips (`agassi-wins`, `nadal-wins`, `graf-wins`, `sharapova-wins`, `finish-him`, `finish-her`, `fatality` .mp3, into `sounds/`) with Piper TTS (voice `en_US-ryan-high`) + ffmpeg; pass clip names to regenerate only those |
 | `tools/gen_icon.py` | Generates the launcher icon `assets/icon0.png` (a shaded tennis ball over a blood splatter, blood dripping off it, "FATAL PONG" in Anton); run from the project root (needs Pillow) |
 | `tools/fonts/` | Anton (SIL Open Font License, `OFL.txt`), the icon's typeface |
-| `tools/screenshots.c` | Off-screen promo renders, driven by `make screenshots` |
-| `assets/` | Launcher icon, player README shipped in the zip, sprite previews, screenshots |
+| `tools/screenshots.c` | Off-screen promo renders, driven by `make screenshots`, which also regenerates the sprite and bonus icon previews |
+| `assets/` | Launcher icon, player README shipped in the zip, the home screen tile's `shortcut/` files |
 
 `sounds/*.mp3` are the sound sources; the Makefile converts them to 48 kHz mono WAV in `target/` and
 `src/core/audio.c` embeds them with `.incbin` (`EMBED_DIR` is passed by the Makefile). The `.onnx` voice models,
@@ -91,7 +91,7 @@ the build uses the SDK's SDL2 headers.
 
 - Never edit `player_sprites.inc` or `bonus_icons.inc` by hand: change `tools/gen_sprites.py` /
   `tools/gen_bonus_icons.py` and run it from the project root (needs Pillow). Each rewrites its `.inc` and its
-  previews in `assets/`. The bonus icons follow the players' style: material ramps lit from the upper left, a dark
+  previews in `target/screenshots/previews/`. The bonus icons follow the players' style: material ramps lit from the upper left, a dark
   outline; keep their order in sync with `BonusType` and the good/bad split with `bonus_is_good()`.
 - Each player is four stacked 32x80 layers (body, legs, left arm, racket arm), drawn 2x wide and stretched
   to the paddle height. Art faces right; the right-hand player is mirrored. The paddle's collision rect stays
@@ -102,7 +102,7 @@ the build uses the SDK's SDL2 headers.
   `FORCE_POINTS` follows their layout. Adding one means a `PLAYERS` entry, a `PlayerLook` value, its row in each `players.c`
   table (`player_name`, `player_hair_color`, `player_is_female`) and a `<name>-wins` clip.
 - A shrunk player (`BONUS_SHRINK`) is drawn as a baby: the same layers and poses on a 32x40 canvas
-  (`BABY_H`), square pixels at the half-height paddle, previewed in `assets/babies.png`. Its feature points are
+  (`BABY_H`), square pixels at the half-height paddle, previewed in `target/screenshots/previews/babies.png`. Its feature points are
   `BABY_POINTS` (players.c); keep them in sync with the baby layout in the generator.
 - Pose counts and indices are shared between the generator and `players.c` (`STEP_POSES`, `LEFT_ARM_POSES`,
   `ARM_POSES`, `POSE_CHARGE`, `POSE_THRUST`); keep them in sync.

@@ -1,7 +1,7 @@
 // Renders promo screenshots with the real game code on the host, off-screen, as BMP frames in
 // target/frames: the start screen, the pause screen, the win screen, a hadouken, a rift, the mole, the
 // earthquake, the frog rain, a fatality and a whole match ending. `make screenshots` builds and runs it, then
-// turns the frames into assets/screenshots/: start, pause, win, mole, earthquake, frog-rain and finale .png, and
+// turns the frames into target/screenshots/: start, pause, win, mole, earthquake, frog-rain and finale .png, and
 // hadouken, rift, mole, earthquake, frog-rain, win, fatality and finale .gif.
 #include "SDL2/SDL.h"
 #include <stdio.h>
